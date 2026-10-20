@@ -31,7 +31,9 @@ def _search_news(args: dict, ctx: ToolContext) -> ToolResult:
     items = news_service.search(query, days=days, limit=limit)
     if not items:
         return ToolResult.success(
-            f"检索 '{query}' 没有返回结果（可能源不可达或时间窗内无新闻）。可以换关键词或放宽 days 再试一次。"
+            f"检索 '{query}' 没有返回结果（可能新闻源暂时不可达或时间窗内无新闻）。"
+            "建议：最多再换 1 次关键词尝试；如果仍为空，就基于当前已知信息完成简报，"
+            "并在 summary 中说明「今日新闻源获取受限」。"
         )
 
     lines = [f"检索 '{query}'（近 {days} 天，返回 {len(items)} 条）:"]

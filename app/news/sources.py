@@ -99,6 +99,12 @@ def _parse_feed(content: bytes, origin: str, query: str = "", limit: int = 20) -
     return items
 
 
+def _looks_like_feed(content: bytes) -> bool:
+    """粗校验响应确实是 RSS/Atom，而不是被重定向到首页的 HTML。"""
+    head = (content or b"")[:600].lstrip().lower()
+    return head.startswith(b"<?xml") or b"<rss" in head or b"<feed" in head
+
+
 def _http_get(url: str, timeout: float = DEFAULT_TIMEOUT, client: httpx.Client | None = None) -> bytes:
     headers = {"User-Agent": USER_AGENT, "Accept": "application/rss+xml, application/xml, text/xml, */*"}
     if client is not None:
@@ -117,11 +123,17 @@ def bing_news_search(
     endpoint: str = "https://www.bing.com/news/search",
     client: httpx.Client | None = None,
 ) -> list[FeedItem]:
-    """用 Bing News 的 RSS 输出做新闻检索（无需 API Key）。"""
-    url = f"{endpoint}?q={quote_plus(query)}&format=rss&setlang={lang.split('-')[0]}&cc=CN"
+    """用 Bing News 的 RSS 输出做新闻检索（无需 API Key）。
+
+    注意：不要加 ``cc=CN`` 参数 —— 实测会 302 重定向到 Bing 首页（HTML），
+    导致解析为空。这里只保留 ``format=rss`` 与 ``setlang``。
+    """
+    url = f"{endpoint}?q={quote_plus(query)}&format=rss&setlang={lang.split('-')[0]}"
     try:
         content = _http_get(url, client=client)
     except (httpx.HTTPError, OSError):
+        return []
+    if not _looks_like_feed(content):
         return []
     return _parse_feed(content, origin="bing", query=query, limit=limit)
 
@@ -131,10 +143,12 @@ def fetch_feed(
     limit: int = 20,
     client: httpx.Client | None = None,
 ) -> list[FeedItem]:
-    """抓取一个固定 RSS 源；失败返回空列表（单源失败不影响整体）。"""
+    """抓取一个固定 RSS 源；失败/被重定向到 HTML 时返回空列表（单源失败不影响整体）。"""
     try:
         content = _http_get(feed_url, client=client)
     except (httpx.HTTPError, OSError):
+        return []
+    if not _looks_like_feed(content):
         return []
     return _parse_feed(content, origin="rss", limit=limit)
 

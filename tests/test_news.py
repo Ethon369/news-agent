@@ -56,6 +56,73 @@ def test_fetch_feed_handles_network_failure(monkeypatch):
     assert fetch_feed("https://feed.example/rss") == []
 
 
+def test_bing_news_search_url_has_no_cc_param():
+    """回归：Bing 的 cc=CN 参数会触发 302 到首页，导致检索永远为空。"""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200, text=BING_XML, headers={"content-type": "application/rss+xml"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    from app.news.sources import bing_news_search
+
+    items = bing_news_search("AI Agent", client=client)
+    assert items
+    assert "cc=" not in captured["url"]
+    assert "format=rss" in captured["url"]
+
+
+def test_bing_news_search_rejects_html_redirect_page():
+    """被重定向到 HTML 首页时返回空，而不是把 HTML 当 RSS 解析。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, text="<html><body>Bing homepage</body></html>", headers={"content-type": "text/html"}
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    from app.news.sources import bing_news_search
+
+    assert bing_news_search("AI", client=client) == []
+
+
+def test_fetch_feed_rejects_html_page(monkeypatch):
+    """机器之心等源会 302 到 HTML，不应被当作 RSS。"""
+    monkeypatch.setattr(
+        "app.news.sources._http_get", lambda *args, **kwargs: b"<html><body>redirected</body></html>"
+    )
+    assert fetch_feed("https://feed.example/rss") == []
+
+
+def test_news_service_falls_back_to_latest_feed_items(test_settings):
+    """检索源不可达/无匹配时，退化为订阅源最新条目，保证 Agent 有候选可用。"""
+    settings = test_settings.model_copy(
+        update={
+            "news_rss_feeds": "https://feed.example/rss",
+            "news_bing_enabled": False,
+            "news_max_articles": 10,
+        }
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=RSS_XML, headers={"content-type": "application/rss+xml"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    service = NewsService(settings, client=client)
+    items = service.search("zzz-完全无关的关键词-zzz", days=30, limit=5)
+    assert items, "fallback 应该返回订阅源最新条目"
+    assert any("OpenAI" in item.title for item in items)
+
+
+def test_news_service_reports_source_health(test_settings):
+    settings = test_settings.model_copy(
+        update={"news_rss_feeds": "https://feed.example/rss", "news_bing_enabled": True, "news_max_articles": 10}
+    )
+    service = NewsService(settings, client=_mock_client())
+    assert service.has_live_sources() is True
+
+
 def test_filter_recent_drops_old_items():
     now = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
     items = _parse_feed(RSS_XML.encode("utf-8"), origin="rss", limit=10)

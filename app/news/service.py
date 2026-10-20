@@ -96,9 +96,27 @@ class NewsService:
                     continue
                 add(item)
 
+        # 兜底：检索源（Bing/部分 RSS）不可达或被反爬时，退化为「订阅源最新条目」，
+        # 保证 Agent 仍有候选可用，而不是空转把步数耗光。
+        fallback_used = not merged
+        if fallback_used:
+            for feed_url in self.settings.rss_feeds:
+                for item in self._feed_items(feed_url, limit=self.settings.news_max_articles)[: limit]:
+                    add(item)
+                    if len(merged) >= limit:
+                        break
+                if len(merged) >= limit:
+                    break
+
         merged = filter_recent(merged, days=days)
         merged.sort(key=lambda item: item.published_at or "", reverse=True)
         return merged[:limit]
+
+    def has_live_sources(self) -> bool:
+        """诊断用：Bing 或任一固定 RSS 源当前是否可用。"""
+        if self.settings.news_bing_enabled and self._bing_items("AI", limit=1):
+            return True
+        return any(self._feed_items(url, limit=1) for url in self.settings.rss_feeds)
 
     # ------------------------------------------------------------------
     def fetch(self, url: str, max_chars: int = 4000) -> Article:
