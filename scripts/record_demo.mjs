@@ -106,14 +106,35 @@ async function main() {
   };
 
   console.log("[demo] 打开页面…");
+  const consoleErrors = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") consoleErrors.push(msg.text());
+  });
+  page.on("pageerror", (error) => consoleErrors.push(`pageerror: ${error.message}`));
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(
-    () => {
-      const badge = document.querySelector("#llm-badge-text");
-      return badge && !badge.textContent.includes("读取");
-    },
-    { timeout: 30000 },
-  );
+  try {
+    await page.waitForFunction(
+      () => {
+        const badge = document.querySelector("#llm-badge");
+        return badge && !badge.textContent.includes("读取");
+      },
+      { timeout: 30000 },
+    );
+  } catch (error) {
+    console.error("[demo] 页面未就绪，调试信息：");
+    console.error("  title:", await page.title().catch(() => "?"));
+    console.error("  badge:", await page.locator("#llm-badge").innerText().catch(() => "(无元素)"));
+    console.error("  bodyText:", (await page.locator("body").innerText().catch(() => "")).slice(0, 400));
+    console.error("  consoleErrors:", consoleErrors.slice(0, 10));
+    await page.screenshot({ path: "docs/demo/debug.png" }).catch(() => {});
+    throw error;
+  }
+  if (process.env.PROBE === "1") {
+    console.log("[demo] PROBE 模式：页面正常，退出。");
+    await context.close();
+    await browser.close();
+    return;
+  }
   await sleep(2200);
 
   console.log("[demo] 展示顶部身份与模型徽标…");
@@ -126,23 +147,33 @@ async function main() {
   await moveTo(keywordInput, 800);
   await moveTo(page.locator("#save-prefs"), 900);
 
-  console.log("[demo] 展示历史简报…");
-  await clickEl(page.locator("#tab-briefings"), 800);
-  await clickEl(page.locator(".briefing-item"), 2200);
-  await page.mouse.move(1050, 620, { steps: 18 });
-  await sleep(600);
-  await page.mouse.wheel(0, 420);
-  await sleep(1500);
-  await page.mouse.wheel(0, -420);
-  await sleep(800);
+  const briefingCount = await page.locator(".briefing-item").count();
+  if (briefingCount > 0) {
+    console.log("[demo] 展示历史简报…");
+    await clickEl(page.locator("#tab-briefings"), 800);
+    await clickEl(page.locator(".briefing-item"), 2200);
+    await page.mouse.move(1050, 620, { steps: 18 });
+    await sleep(600);
+    await page.mouse.wheel(0, 420);
+    await sleep(1500);
+    await page.mouse.wheel(0, -420);
+    await sleep(800);
+  }
 
-  console.log("[demo] 展示运行轨迹（上一次真实运行）…");
-  await clickEl(page.locator("#tab-run"), 1000);
-  await moveTo(page.locator("#run-steps"), 700).catch(() => {});
-  await page.locator("#run-scroll").evaluate((el) => (el.scrollTop = el.scrollHeight));
-  await sleep(1600);
-  await page.locator("#run-scroll").evaluate((el) => (el.scrollTop = 0));
-  await sleep(1000);
+  const traceCount = await page.locator("#run-steps .tl-item").count();
+  if (traceCount > 0) {
+    console.log("[demo] 展示运行轨迹（上一次真实运行）…");
+    await clickEl(page.locator("#tab-run"), 1000);
+    await moveTo(page.locator("#run-steps"), 700).catch(() => {});
+    await page.locator("#run-scroll").evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await sleep(1600);
+    await page.locator("#run-scroll").evaluate((el) => (el.scrollTop = 0));
+    await sleep(1000);
+  } else {
+    console.log("[demo] 暂无历史轨迹，展示运行页引导…");
+    await clickEl(page.locator("#tab-run"), 1200);
+    await moveTo(page.locator("#run-empty"), 1600).catch(() => {});
+  }
 
   console.log("[demo] 触发一次真实运行…");
   await clickEl(page.locator("#run-btn"), 1600);
