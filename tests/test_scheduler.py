@@ -95,3 +95,87 @@ def test_concurrent_trigger_guard(test_settings, database, user):
             raise AssertionError("并发触发没有被拦截")
     finally:
         lock.release()
+
+
+# ---------------------------------------------------------------------------
+# 每日外部推送限流（避免手动 + 定时重复刷屏）
+# ---------------------------------------------------------------------------
+
+
+def _seed_briefing_with_delivery(database, user, created_at=None):
+    from app.models import Briefing, Delivery
+
+    session = database.session_factory()
+    try:
+        briefing = Briefing(
+            user_id=user.id,
+            title="AI Daily · 测试",
+            summary="",
+            content_md="",
+            item_count=0,
+            briefing_date=utcnow().date(),
+            created_at=utcnow(),
+        )
+        session.add(briefing)
+        session.flush()
+        session.add(
+            Delivery(
+                briefing_id=briefing.id,
+                channel="email",
+                status="success",
+                detail="已发送",
+                created_at=created_at or utcnow(),
+            )
+        )
+        session.commit()
+        return briefing.id
+    finally:
+        session.close()
+
+
+def test_daily_external_push_limit_detects_today(database, user, test_settings):
+    from app.services.runner import AgentRunner
+
+    _seed_briefing_with_delivery(database, user)
+    runner = AgentRunner(test_settings, database)
+    assert runner._already_delivered_today(user.id, "email") is True
+    assert runner._already_delivered_today(user.id, "feishu") is False
+    assert runner._already_delivered_today(user.id, "web") is False
+
+
+def test_daily_external_push_limit_ignores_old_delivery(database, user, test_settings):
+    from datetime import timedelta
+
+    from app.services.runner import AgentRunner
+
+    _seed_briefing_with_delivery(database, user, created_at=utcnow() - timedelta(days=2))
+    runner = AgentRunner(test_settings, database)
+    assert runner._already_delivered_today(user.id, "email") is False
+
+
+def test_daily_external_push_limit_can_be_disabled(database, user, test_settings):
+    from app.services.runner import AgentRunner
+
+    _seed_briefing_with_delivery(database, user)
+    settings = test_settings.model_copy(update={"delivery_daily_limit": False})
+    runner = AgentRunner(settings, database)
+    assert runner._already_delivered_today(user.id, "email") is False
+
+
+def test_deliver_skips_second_external_push_same_day(database, user, test_settings):
+    from app.models import Delivery
+    from app.services.runner import AgentRunner
+
+    briefing_id = _seed_briefing_with_delivery(database, user)
+    settings = test_settings.model_copy(update={"push_channels": "web,email"})
+    runner = AgentRunner(settings, database)
+    runner._deliver(briefing_id=briefing_id, user_id=user.id, run_id=1, channels=["email"], no_update=False)
+
+    session = database.session_factory()
+    try:
+        last = session.query(Delivery).order_by(Delivery.id.desc()).first()
+        assert last.channel == "email"
+        assert last.status == "skipped"
+        assert "每日限 1 封" in last.detail
+    finally:
+        session.close()

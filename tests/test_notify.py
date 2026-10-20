@@ -80,6 +80,8 @@ def test_email_skipped_without_user_email(test_settings):
 
 def test_email_html_escapes_llm_content():
     """AI code review 发现的 P2：LLM 生成的文本进入邮件 HTML 前必须转义。"""
+    from datetime import date
+
     from app.notify.email import render_email_html
 
     item = SimpleNamespace(
@@ -89,8 +91,11 @@ def test_email_html_escapes_llm_content():
         reason="",
         published_at=None,
         summary="<img src=x onerror=alert(1)>",
+        evidence_level="仅标题",
     )
-    briefing = SimpleNamespace(title="<b>标题</b>", summary="<script>x</script>", items=[item])
+    briefing = SimpleNamespace(
+        title="<b>标题</b>", summary="<script>x</script>", items=[item], briefing_date=date(2026, 10, 20)
+    )
     html = render_email_html(briefing, _user(name="<i>用户</i>"))
     assert "<script>" not in html
     assert "<img" not in html  # 标签被转义成文本，不再具有 HTML 语义
@@ -99,6 +104,28 @@ def test_email_html_escapes_llm_content():
     assert html.count("&lt;") >= 3
     assert 'href="#"' in html  # 非 http(s) 链接被降级
     assert "&lt;i&gt;用户" in html
+    assert "证据范围：仅标题" in html  # 证据分级进入邮件正文
+
+
+def test_email_subject_uses_date_and_top_story():
+    from datetime import date
+
+    from app.notify.email import build_subject
+
+    item = SimpleNamespace(title="MiniMax M3.1 Flash 发布")
+    briefing = SimpleNamespace(title="AI Daily · 2026-10-20", items=[item], briefing_date=date(2026, 10, 20))
+    subject = build_subject(briefing)
+    assert subject.startswith("AI 每日简报｜10月20日：")
+    assert "MiniMax M3.1 Flash 发布" in subject
+
+
+def test_email_subject_without_items():
+    from datetime import date
+
+    from app.notify.email import build_subject
+
+    briefing = SimpleNamespace(title="AI Daily · 2026-10-20", items=[], briefing_date=date(2026, 10, 20))
+    assert build_subject(briefing) == "AI 每日简报｜10月20日：AI Daily · 2026-10-20"
 
 
 @pytest.mark.parametrize("channels", [["web"], ["web", "feishu"]])

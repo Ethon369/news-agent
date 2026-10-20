@@ -44,3 +44,6 @@ docs/demo/frames/
 # Python/pytest temp dirs that may leak into repo root
 pytest-of-*/
 tmpopp*/
+
+# playwright-cli session artifacts
+.playwright-cli/

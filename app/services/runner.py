@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -387,12 +387,43 @@ class AgentRunner:
                     status="skipped",
                     detail="今日无新增内容，不发送外部推送",
                 )
+            elif notifier.channel != "web" and self._already_delivered_today(user_id, notifier.channel):
+                # 每日最多一封外部推送：手动/定时多次运行不会把收件箱刷屏
+                result = DeliveryResult(
+                    channel=notifier.channel,
+                    status="skipped",
+                    detail="今日已通过该渠道发送过简报（每日限 1 封外部推送）",
+                )
             else:
                 try:
                     result = notifier.send(briefing, user)
                 except Exception as exc:  # noqa: BLE001 - 推送失败不影响简报
                     result = DeliveryResult(channel=notifier.channel, status="failed", detail=str(exc))
             self._record_delivery(run_id, briefing_id, result)
+
+    def _already_delivered_today(self, user_id: int, channel: str) -> bool:
+        """该用户今天是否已经通过该外部渠道成功推送过（按 APP_TIMEZONE 划分自然日）。"""
+        if not self.settings.delivery_daily_limit or channel == "web":
+            return False
+        tz = ZoneInfo(self.settings.app_timezone)
+        local_now = datetime.now(tz)
+        day_start = datetime.combine(local_now.date(), time.min, tzinfo=tz).astimezone(UTC)
+        session = self.db.session_factory()
+        try:
+            row = session.execute(
+                select(Delivery.id)
+                .join(Briefing, Briefing.id == Delivery.briefing_id)
+                .where(
+                    Briefing.user_id == user_id,
+                    Delivery.channel == channel,
+                    Delivery.status == "success",
+                    Delivery.created_at >= day_start,
+                )
+                .limit(1)
+            ).first()
+            return row is not None
+        finally:
+            session.close()
 
     def _record_delivery(self, run_id: int, briefing_id: int, result: DeliveryResult) -> None:
         session = self.db.session_factory()

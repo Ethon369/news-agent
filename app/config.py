@@ -56,6 +56,8 @@ class Settings(BaseSettings):
 
     # ---------- 推送 ----------
     push_channels: str = "web"
+    # 同一用户每天最多一封外部推送（email/feishu）；设为 false 可关闭限制
+    delivery_daily_limit: bool = True
     feishu_webhook_url: str = ""
     feishu_secret: str = ""
     feishu_verify_ssl: bool = True
