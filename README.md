@@ -184,9 +184,11 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `LLM_MODE` | `real` | `real` 调真实模型；`mock` 离线演示 |
+| `LLM_MODE` | `mock` | `mock` 离线演示（零密钥）；`real` 调真实模型 |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | DeepSeek | 任意 OpenAI 兼容服务 |
+| `LLM_MAX_TOKENS` | `4096` | 单次模型回复上限（publish_briefing 需要完整 JSON 空间） |
 | `AGENT_MAX_STEPS` | `24` | 单次运行最大 Agent 步数 |
+| `AGENT_TOKEN_BUDGET` | `500000` | 单次运行累计 prompt token 上限，超预算强制收尾 |
 | `DATABASE_URL` | `sqlite:///./data/ai_daily.db` | 可切 MySQL/Postgres |
 | `NEWS_RSS_FEEDS` | HN/arXiv/TechCrunch/机器之心 | 逗号分隔，随意增删 |
 | `PUSH_CHANNELS` | `web` | 服务端允许的推送渠道（web 始终可用） |
