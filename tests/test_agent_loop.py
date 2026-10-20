@@ -113,6 +113,41 @@ def test_max_steps_forces_final_answer(tool_ctx, scripted_llm):
     assert llm.calls == 3  # 2 轮正常 + 1 次强制收敛
 
 
+def test_forced_final_can_still_publish(tool_ctx, scripted_llm):
+    """AI code review 发现的 P2：强制收敛阶段只暴露 publish_briefing，模型仍可提交。"""
+    script = [
+        {"content": "看目录", "tool_calls": [{"name": "list_dir", "arguments": {"path": "archive"}}]},
+        {"content": "再搜一次", "tool_calls": [{"name": "search_news", "arguments": {"query": "AI", "limit": 2}}]},
+        # 第 3 次调用发生在「强制收敛」阶段：模型此时只拿到 publish_briefing 的 schema
+        {"content": "收尾提交", "tool_calls": [{"name": "publish_briefing", "arguments": PUBLISH}]},
+    ]
+    llm = scripted_llm(script)
+    result = run_agent(tool_ctx, llm, _registry(tool_ctx), max_steps=2)
+
+    assert llm.calls == 3
+    assert result.status == "success"
+    assert result.briefing_payload is not None
+    assert _tool_order(result)[-1] == "publish_briefing"
+
+
+def test_token_budget_forces_final(tool_ctx, scripted_llm):
+    class TokenHungryLLM(scripted_llm):
+        def chat(self, messages, tools=None, tool_choice="auto"):
+            response = super().chat(messages, tools=tools, tool_choice=tool_choice)
+            response.prompt_tokens = 100_000
+            return response
+
+    script = [
+        {"content": f"第{i}轮", "tool_calls": [{"name": "list_dir", "arguments": {"path": "archive"}}]}
+        for i in range(4)
+    ]
+    llm = TokenHungryLLM(script)
+    result = run_agent(tool_ctx, llm, _registry(tool_ctx), max_steps=10, token_budget=150_000)
+    assert result.status in {"success", "failed"}
+    # 超过预算后不再继续满步数循环（第 2 轮后触发收尾）
+    assert result.step_count <= 3
+
+
 def test_finish_without_publish_is_failure(tool_ctx, scripted_llm):
     llm = scripted_llm(["我觉得今天没什么新闻。"])
     result = run_agent(tool_ctx, llm, _registry(tool_ctx), max_steps=4)

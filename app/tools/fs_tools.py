@@ -212,6 +212,7 @@ def _search_content(args: dict, ctx: ToolContext) -> ToolResult:
     needle = keyword.lower()
     hits: list[str] = []
     scanned = 0
+    workspace_root = workspace.resolve()
     for root, dirs, files in os.walk(base):
         dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
         for filename in files:
@@ -221,13 +222,21 @@ def _search_content(args: dict, ctx: ToolContext) -> ToolResult:
             if path.suffix.lower() not in _TEXT_SUFFIXES:
                 continue
             try:
-                if path.stat().st_size > MAX_FILE_SIZE:
+                # 先 resolve 再校验：符号链接指向 workspace 外时直接跳过（不读取、不报错泄露路径）
+                resolved = path.resolve()
+                try:
+                    resolved.relative_to(workspace_root)
+                except ValueError:
+                    continue
+                if path.is_symlink() and not resolved.is_file():
+                    continue
+                if resolved.stat().st_size > MAX_FILE_SIZE:
                     continue
                 scanned += 1
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
+                content = resolved.read_text(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
                 continue
-            rel = relative_to_workspace(workspace, path)
+            rel = relative_to_workspace(workspace, resolved)
             for lineno, line in enumerate(content.splitlines(), start=1):
                 if needle in line.lower():
                     snippet = line.strip()

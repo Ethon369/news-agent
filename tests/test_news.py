@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 import httpx
+import pytest
 
 from app.news.extractor import extract_from_html, fetch_article
 from app.news.service import NewsService
-from app.news.sources import fetch_feed, filter_recent, _parse_feed
+from app.news.sources import _parse_feed, fetch_feed, filter_recent
 
 RSS_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Test Feed</title>
@@ -56,7 +57,7 @@ def test_fetch_feed_handles_network_failure(monkeypatch):
 
 
 def test_filter_recent_drops_old_items():
-    now = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
     items = _parse_feed(RSS_XML.encode("utf-8"), origin="rss", limit=10)
     recent = filter_recent(items, days=2, now=now)
     assert all(item.title != "无关的体育新闻" or item.published_at for item in recent)
@@ -91,6 +92,76 @@ def test_extract_from_html_removes_scripts_and_boilerplate():
 def test_fetch_article_rejects_non_http():
     article = fetch_article("file:///etc/passwd")
     assert not article.ok
+
+
+# ---------------------------------------------------------------------------
+# SSRF 防护（AI code review 发现的 P1）
+# ---------------------------------------------------------------------------
+
+
+def test_assert_public_url_blocks_localhost():
+    from app.news.extractor import UnsafeURLError, assert_public_url
+
+    for url in ["http://127.0.0.1:8000/api/users", "http://localhost/admin", "http://[::1]/"]:
+        with pytest.raises(UnsafeURLError):
+            assert_public_url(url)
+
+
+def test_assert_public_url_blocks_private_dns(monkeypatch):
+    import socket
+
+    from app.news.extractor import UnsafeURLError, assert_public_url
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 80))]
+
+    monkeypatch.setattr("app.news.extractor.socket.getaddrinfo", fake_getaddrinfo)
+    with pytest.raises(UnsafeURLError):
+        assert_public_url("https://internal.example.com/news")
+
+
+def test_assert_public_url_blocks_metadata_ip(monkeypatch):
+    import socket
+
+    from app.news.extractor import UnsafeURLError, assert_public_url
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 80))]
+
+    monkeypatch.setattr("app.news.extractor.socket.getaddrinfo", fake_getaddrinfo)
+    with pytest.raises(UnsafeURLError):
+        assert_public_url("http://169.254.169.254/latest/meta-data")
+
+
+def test_fetch_article_blocks_private_target():
+    article = fetch_article("http://127.0.0.1:8000/api/users")
+    assert not article.ok
+    assert "内网" in article.error or "本机" in article.error
+
+
+def test_fetch_article_blocks_redirect_to_private(monkeypatch):
+    import socket
+
+    from app.news.extractor import fetch_article
+
+    calls = {"n": 0}
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        calls["n"] += 1
+        if host == "public.example.com":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 8000))]
+
+    monkeypatch.setattr("app.news.extractor.socket.getaddrinfo", fake_getaddrinfo)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "http://127.0.0.1:8000/api/users"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    article = fetch_article("https://public.example.com/news", client=client)
+    assert not article.ok
+    assert "内网" in article.error or "本机" in article.error
+    assert calls["n"] >= 2  # 每一跳都做了校验
 
 
 def _mock_client() -> httpx.Client:

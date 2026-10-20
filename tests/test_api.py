@@ -69,6 +69,18 @@ def test_not_found_resources(client):
     assert client.post("/api/users/9999/run").json()["code"] == 40401
 
 
+def test_framework_404_and_405_use_envelope(client):
+    """AI code review 发现的 P2：框架级 404/405 也要走统一信封。"""
+    not_found = client.get("/api/does-not-exist")
+    assert not_found.status_code == 404
+    assert not_found.json()["code"] == 40401
+
+    wrong_method = client.post("/api/health")
+    assert wrong_method.status_code == 405
+    body = wrong_method.json()
+    assert set(body) == {"code", "message", "data"}
+
+
 def _wait_run(client, run_id: int, timeout: float = 30.0) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:

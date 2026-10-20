@@ -66,3 +66,39 @@ def test_git_disallowed_subcommand(tool_ctx):
     result = _run("git push origin main", tool_ctx)
     assert not result.ok
     assert result.code == "command_denied"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git diff --no-index ../../.env ../../README.md",
+        "git diff --output=../../pwned.txt",
+        "git show HEAD:../../.env",
+        "git log --all",
+        "git rev-parse --show-toplevel",
+        "git status --porcelain ../../",
+    ],
+)
+def test_git_sandbox_bypass_is_denied(tool_ctx, command):
+    """AI code review 发现的 P1：git 参数可绕出 workspace，已改为 token 级白名单。"""
+    result = _run(command, tool_ctx)
+    assert not result.ok
+    assert result.code == "command_denied"
+
+
+def test_git_allowed_commands_pass_validation(tool_ctx):
+    from app.tools.bash_tool import ToolError, _validate_git
+
+    # 允许的命令应通过校验（工作区不是 git 仓库时执行结果可能是错误输出，但不应被判定为越权）
+    _validate_git(["git", "status", "--short"])
+    _validate_git(["git", "log", "--oneline", "-n", "3"])
+    _validate_git(["git", "rev-parse", "--short", "HEAD"])
+    with pytest.raises(ToolError):
+        _validate_git(["git", "log", "--oneline", "-n", "3", "file.txt"])
+
+
+def test_grep_rejects_nested_quantifier(tool_ctx):
+    (tool_ctx.workspace / "archive" / "x.md").write_text("a" * 5000, encoding="utf-8")
+    result = _run("grep (a+)+b archive/x.md", tool_ctx)
+    assert not result.ok
+    assert result.code in {"bad_argument", "shell_operator_denied"}

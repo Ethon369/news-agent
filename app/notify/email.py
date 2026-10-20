@@ -2,37 +2,52 @@
 
 from __future__ import annotations
 
+import html
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, formatdate
+from urllib.parse import urlsplit
 
 from app.notify.base import BaseNotifier, DeliveryResult
 
 
+def _safe_url(url: str) -> str:
+    """只允许 http(s) 链接进入邮件（防 javascript: / data: 注入），并做 HTML 转义。"""
+    raw = str(url or "").strip()
+    parts = urlsplit(raw)
+    if parts.scheme not in {"http", "https"}:
+        return "#"
+    return html.escape(raw, quote=True)
+
+
 def render_email_html(briefing, user) -> str:
+    # 所有来自 LLM / 新闻源的文本都必须转义（AI code review 发现的 HTML 注入面）
+    title = html.escape(str(briefing.title or ""))
+    summary = html.escape(str(briefing.summary or ""))
     parts = [
         '<html><body style="font-family:-apple-system,Segoe UI,Microsoft YaHei,sans-serif;'
         'max-width:640px;margin:0 auto;padding:24px;color:#1f2937;line-height:1.65;">',
-        f'<h1 style="font-size:22px;">{briefing.title}</h1>',
+        f'<h1 style="font-size:22px;">{title}</h1>',
     ]
     if briefing.summary:
-        parts.append(
-            f'<p style="color:#4b5563;border-left:3px solid #6366f1;padding-left:12px;">{briefing.summary}</p>'
-        )
+        parts.append(f'<p style="color:#4b5563;border-left:3px solid #6366f1;padding-left:12px;">{summary}</p>')
     for index, item in enumerate(briefing.items, start=1):
-        meta = item.source + (f" · {item.published_at[:16]}" if item.published_at else "")
+        meta = html.escape(str(item.source or "")) + (
+            f" · {html.escape(str(item.published_at)[:16])}" if item.published_at else ""
+        )
         parts.append(
             '<div style="margin:20px 0;padding-bottom:16px;border-bottom:1px solid #e5e7eb;">'
-            f'<h2 style="font-size:17px;margin:0 0 6px;">{index}. {item.title}</h2>'
+            f'<h2 style="font-size:17px;margin:0 0 6px;">{index}. {html.escape(str(item.title or ""))}</h2>'
             f'<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">{meta}</div>'
-            f'<p style="margin:0 0 8px;">{item.summary}</p>'
-            f'<a href="{item.url}" style="color:#6366f1;">阅读原文</a>'
+            f'<p style="margin:0 0 8px;">{html.escape(str(item.summary or ""))}</p>'
+            f'<a href="{_safe_url(item.url)}" style="color:#6366f1;">阅读原文</a>'
             "</div>"
         )
     parts.append(
-        f'<p style="font-size:12px;color:#9ca3af;">由 AI Daily Agent 为 {user.name} 生成 · 每条均附原始来源链接</p>'
+        f'<p style="font-size:12px;color:#9ca3af;">由 AI Daily Agent 为 '
+        f"{html.escape(str(getattr(user, 'name', '') or ''))} 生成 · 每条均附原始来源链接</p>"
     )
     parts.append("</body></html>")
     return "".join(parts)

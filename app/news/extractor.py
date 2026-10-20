@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import ipaddress
+import socket
 from dataclasses import dataclass
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -10,9 +13,67 @@ from bs4 import BeautifulSoup
 USER_AGENT = "Mozilla/5.0 (compatible; AIDailyAgent/0.1; +https://github.com/; news briefing demo)"
 MAX_HTML_BYTES = 2 * 1024 * 1024
 DEFAULT_TIMEOUT = 20.0
+MAX_REDIRECTS = 3
 
 _STRIP_TAGS = ["script", "style", "noscript", "iframe", "svg", "nav", "footer", "header", "aside", "form"]
 _BOILERPLATE_HINTS = ("cookie", "subscribe", "advertisement", "sign up", "newsletter", "advertise")
+
+# 本机/内网/元数据服务常见主机名（即使 DNS 解析到公网也拒绝）
+_BLOCKED_HOSTNAMES = {
+    "localhost",
+    "localhost.localdomain",
+    "ip6-localhost",
+    "metadata",
+    "metadata.google.internal",
+    "instance-data",
+}
+
+
+class UnsafeURLError(ValueError):
+    """目标 URL 不是公网可访问地址（SSRF 防护）。"""
+
+
+def _is_public_ip(raw_ip: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(raw_ip.split("%", 1)[0])
+    except ValueError:
+        return False
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return _is_public_ip(str(ip.ipv4_mapped))
+    return True
+
+
+def assert_public_url(url: str) -> None:
+    """校验 URL 只指向公网 http(s) 地址，否则抛 UnsafeURLError。
+
+    - 拒绝非 http(s) 协议、缺失主机名；
+    - 拒绝 localhost / *.local / *.internal / 云元数据主机名；
+    - 对域名做 DNS 解析，逐个检查解析出的 IP（含 IPv6），拒绝私网/回环/链路本地/保留地址；
+    - 注意：DNS pinning 仍非绝对（存在 rebinding 窗口），生产环境应配合出口代理白名单。
+    """
+    parts = urlsplit(url or "")
+    if parts.scheme not in {"http", "https"}:
+        raise UnsafeURLError("仅允许访问 http/https 公网地址")
+    host = (parts.hostname or "").strip().lower()
+    if not host:
+        raise UnsafeURLError("URL 缺少主机名")
+    if host in _BLOCKED_HOSTNAMES or host.endswith((".local", ".internal", ".localhost")):
+        raise UnsafeURLError(f"拒绝访问本机/内网地址: {host}")
+
+    try:
+        infos = socket.getaddrinfo(
+            host, parts.port or (443 if parts.scheme == "https" else 80), proto=socket.IPPROTO_TCP
+        )
+    except socket.gaierror as exc:
+        raise UnsafeURLError(f"域名解析失败: {host}") from exc
+    if not infos:
+        raise UnsafeURLError(f"域名无解析结果: {host}")
+    for info in infos:
+        ip_text = str(info[4][0])
+        if not _is_public_ip(ip_text):
+            raise UnsafeURLError(f"拒绝访问内网/保留地址: {host} -> {ip_text}")
 
 
 @dataclass
@@ -79,23 +140,40 @@ def extract_from_html(html: str, url: str = "") -> Article:
 
 
 def fetch_article(url: str, max_chars: int = 4000, client: httpx.Client | None = None) -> Article:
-    """抓取并抽取正文；任何网络/解析失败都返回 ok=False 的 Article，不抛异常。"""
-    if not url.lower().startswith(("http://", "https://")):
-        return Article(url=url, title="", text="", ok=False, error="仅支持 http/https 链接")
+    """抓取并抽取正文；任何网络/解析失败都返回 ok=False 的 Article，不抛异常。
+
+    安全：只允许访问公网 http(s) 地址，且对每一跳重定向重新校验（防 SSRF /
+    内网探测 / 云元数据读取）。见 ADR-0007。
+    """
+    current = url
     headers = {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"}
+    own_client = client is None
+    http = client or httpx.Client(follow_redirects=False)
     try:
-        if client is not None:
-            response = client.get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
+        for _hop in range(MAX_REDIRECTS + 1):
+            assert_public_url(current)
+            response = http.get(current, headers=headers, timeout=DEFAULT_TIMEOUT, follow_redirects=False)
+            if response.is_redirect:
+                location = response.headers.get("location")
+                if not location:
+                    return Article(url=url, title="", text="", ok=False, error="重定向缺少 Location 头")
+                current = urljoin(current, location)
+                continue
+            response.raise_for_status()
+            content = response.content[:MAX_HTML_BYTES]
+            encoding = response.encoding or "utf-8"
+            html = content.decode(encoding, errors="replace")
+            break
         else:
-            with httpx.Client(follow_redirects=True) as own:
-                response = own.get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
-        response.raise_for_status()
-        content = response.content[:MAX_HTML_BYTES]
-        encoding = response.encoding or "utf-8"
-        html = content.decode(encoding, errors="replace")
+            return Article(url=url, title="", text="", ok=False, error="重定向次数过多，已中止")
+    except UnsafeURLError as exc:
+        return Article(url=url, title="", text="", ok=False, error=str(exc))
     except (httpx.HTTPError, UnicodeDecodeError, OSError) as exc:
         return Article(url=url, title="", text="", ok=False, error=f"抓取失败: {exc}")
+    finally:
+        if own_client:
+            http.close()
 
-    article = extract_from_html(html, url=url)
+    article = extract_from_html(html, url=current)
     article.text = article.text[:max_chars]
     return article

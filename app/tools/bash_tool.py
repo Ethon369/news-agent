@@ -31,15 +31,22 @@ from app.tools.base import (
 DEFAULT_TIMEOUT = 15
 MAX_OUTPUT_CHARS = 4000
 MAX_SCAN_LINES = 500
+MAX_GREP_PATTERN_CHARS = 120
 
 FORBIDDEN_CHARS = set("|&;><`$\n\r")
 ALLOWED_REAL_BINARIES = {"whoami", "hostname"}
-ALLOWED_GIT_SUBCOMMANDS = {"status", "log", "rev-parse", "diff", "show"}
+# git 只保留「不接触路径参数」的只读子命令；diff/show 可通过 --no-index/--output 越权，已移除
+GIT_COMMAND_RULES: dict[str, set[str]] = {
+    "status": {"--short"},
+    "log": {"--oneline", "-n"},
+    "rev-parse": {"HEAD", "--short"},
+}
+ALLOWED_GIT_SUBCOMMANDS = set(GIT_COMMAND_RULES)
 
 _HELP = (
     "允许的命令：date | pwd | echo <text> | ls [path] | cat <file> | head -n <N> <file> | "
     "tail -n <N> <file> | wc [-l|-c|-w] <file> | grep [-i] <pattern> <file> | "
-    "whoami | hostname | git status --short | git log --oneline -n <N>"
+    "whoami | hostname | git status --short | git log --oneline -n <N> | git rev-parse [--short] HEAD"
 )
 
 _PARAMS = {
@@ -139,6 +146,11 @@ def _builtin_grep(ctx: ToolContext, args: list[str]) -> str:
     if len(rest) < 2:
         raise ToolError("用法: grep [-i] <pattern> <file>", "bad_argument")
     pattern, file_path = rest[0], rest[1]
+    if len(pattern) > MAX_GREP_PATTERN_CHARS:
+        raise ToolError(f"正则表达式过长（>{MAX_GREP_PATTERN_CHARS} 字符）", "bad_argument")
+    # 拒绝嵌套量词（如 (a+)+），避免灾难性回溯把工具线程卡死
+    if re.search(r"\([^()]*[+*][^()]*\)[+*{]", pattern):
+        raise ToolError("不允许嵌套量词的正则表达式（可能导致灾难性回溯）", "bad_argument")
     text = _read_text(ctx, file_path)
     flags = re.IGNORECASE if ignore_case else 0
     try:
@@ -147,6 +159,8 @@ def _builtin_grep(ctx: ToolContext, args: list[str]) -> str:
         raise ToolError(f"无效的正则表达式: {exc}", "bad_argument") from None
     hits = []
     for lineno, line in enumerate(text.splitlines(), start=1):
+        if len(line) > 20_000:  # 超长单行跳过，避免正则回溯放大
+            continue
         if regex.search(line):
             hits.append(f"{lineno}:{line}")
             if len(hits) >= 200:
@@ -176,12 +190,35 @@ def _run_real(ctx: ToolContext, argv: list[str], timeout: int) -> str:
 
 
 def _validate_git(argv: list[str]) -> None:
-    if len(argv) < 2 or argv[1] not in ALLOWED_GIT_SUBCOMMANDS:
-        raise ToolError("git 仅允许 status/log/rev-parse/diff/show 子命令", "command_denied")
-    if argv[1] == "status" and argv[2:] not in ([], ["--short"]):
+    """严格按子命令做 token 级白名单，避免任何路径/输出参数绕过 workspace 沙箱。
+
+    （AI code review 发现：`git diff --no-index <file>` 可读 workspace 外文件，
+    `git diff --output=<path>` 可写 workspace 外文件。这里彻底移除了接触路径的
+    diff/show，并对剩余子命令做逐 token 校验。）
+    """
+    if len(argv) < 2 or argv[1] not in GIT_COMMAND_RULES:
+        raise ToolError(
+            "git 仅允许 git status --short | git log --oneline -n <N> | git rev-parse [--short] HEAD",
+            "command_denied",
+        )
+    subcommand = argv[1]
+    allowed = GIT_COMMAND_RULES[subcommand]
+    rest = argv[2:]
+    for token in rest:
+        if token in allowed:
+            continue
+        if subcommand == "log" and re.fullmatch(r"\d{1,3}", token):
+            continue  # -n 的行数参数
+        raise ToolError(f"git {subcommand} 不允许参数: {token!r}", "command_denied")
+    if subcommand == "status" and rest not in ([], ["--short"]):
         raise ToolError("git status 仅允许 --short", "command_denied")
-    if argv[1] in {"log", "show"} and any(flag in argv for flag in ("--all", "--graph")):
-        raise ToolError("git log/show 不允许 --all/--graph", "command_denied")
+    if subcommand == "log":
+        has_n = "-n" in rest
+        has_number = any(re.fullmatch(r"\d{1,3}", token) for token in rest)
+        if has_n != has_number or ("--oneline" not in rest and has_n):
+            raise ToolError("git log 仅允许 --oneline -n <N>", "command_denied")
+    if subcommand == "rev-parse" and rest and rest[-1] != "HEAD":
+        raise ToolError("git rev-parse 仅允许 [--short] HEAD", "command_denied")
 
 
 def run_bash(command: str, ctx: ToolContext, timeout: int = DEFAULT_TIMEOUT) -> str:
