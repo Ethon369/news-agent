@@ -86,6 +86,7 @@ class BriefingItem(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 为什么被选中（偏好命中说明）
     tags: Mapped[str] = mapped_column(Text, nullable=False, default="[]")  # JSON array
+    evidence_level: Mapped[str] = mapped_column(String(40), nullable=False, default="")  # 证据分级
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     briefing: Mapped[Briefing] = relationship(back_populates="items")

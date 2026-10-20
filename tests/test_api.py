@@ -111,6 +111,7 @@ def test_full_run_flow_with_mock(client):
     assert len(briefings) == 1
     detail = client.get(f"/api/briefings/{briefings[0]['id']}").json()["data"]
     assert detail["items"]
+    assert all(item["evidence_level"] for item in detail["items"])  # 证据分级已落库
     assert detail["content_md"].startswith("# ")
     assert detail["deliveries"][0]["channel"] == "web"
     assert detail["deliveries"][0]["status"] == "success"

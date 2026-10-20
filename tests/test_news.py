@@ -268,3 +268,22 @@ def test_news_service_caches_repeated_calls(test_settings):
     first_count = calls["count"]
     service.search("OpenAI", days=5, limit=5)
     assert calls["count"] == first_count  # 第二次走缓存
+
+BING_APICLICK_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Bing News</title>
+<item>
+  <title>TechCrunch 报道</title>
+  <link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;url=https%3a%2f%2ftechcrunch.com%2f2026%2f10%2f20%2fstory%2f&amp;c=123</link>
+  <description>报道内容</description>
+  <pubDate>Mon, 20 Oct 2026 09:00:00 GMT</pubDate>
+  <source>TechCrunch</source>
+</item>
+</channel></rss>
+"""
+
+
+def test_parse_feed_unwraps_bing_apiclick_links():
+    """Bing 的 apiclick 跳转链接要解出真实目标，去重/溯源/抓取才能对上。"""
+    items = _parse_feed(BING_APICLICK_XML.encode("utf-8"), origin="bing", limit=5)
+    assert items
+    assert items[0].url == "https://techcrunch.com/2026/10/20/story/"

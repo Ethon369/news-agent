@@ -131,13 +131,15 @@ def render_markdown(title: str, summary: str, items: list[dict[str, Any]], user_
             lines.append("")
         lines.append(f"- 来源：{meta}")
         lines.append(f"- 链接：{item.get('url', '')}")
+        if item.get("evidence_level"):
+            lines.append(f"- 证据范围：{item['evidence_level']}")
         if item.get("reason"):
             lines.append(f"- 入选理由：{item['reason']}")
         if item.get("tags"):
             lines.append(f"- 标签：{'、'.join(str(tag) for tag in item['tags'])}")
         lines.append("")
     lines.append("---")
-    lines.append("由 AI Daily Agent 基于 LLM 自主工具调用生成；每条均标注原始来源链接。")
+    lines.append("由 AI Daily Agent 基于 LLM 自主工具调用生成；每条均标注原始来源链接与证据范围。")
     return "\n".join(lines)
 
 
@@ -184,6 +186,7 @@ def persist_briefing(
                 published_at=item.get("published_at"),
                 summary=str(item.get("summary", "") or ""),
                 reason=str(item.get("reason", "") or ""),
+                evidence_level=str(item.get("evidence_level", "") or "")[:40],
                 tags=json.dumps(item.get("tags") or [], ensure_ascii=False),
                 score=item.get("score"),
             )

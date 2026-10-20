@@ -8,7 +8,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, urlsplit
 
 import feedparser
 import httpx
@@ -66,6 +66,17 @@ def _clean_html(raw: str, limit: int = 320) -> str:
     return text[:limit]
 
 
+def _unwrap_bing_link(link: str) -> str:
+    """Bing News RSS 部分条目给的是 apiclick 跳转链接，解出真实目标 URL。
+
+    好处：去重更准、抓取时少一跳重定向，也让「链接溯源」校验能对上真实来源。
+    """
+    if "bing.com/news/apiclick.aspx" not in link:
+        return link
+    target = parse_qs(urlsplit(link).query).get("url", [""])[0]
+    return target or link
+
+
 def _parse_feed(content: bytes, origin: str, query: str = "", limit: int = 20) -> list[FeedItem]:
     parsed = feedparser.parse(content)
     items: list[FeedItem] = []
@@ -74,6 +85,8 @@ def _parse_feed(content: bytes, origin: str, query: str = "", limit: int = 20) -
         link = (getattr(entry, "link", "") or "").strip()
         if not title or not link:
             continue
+        if origin == "bing":
+            link = _unwrap_bing_link(link)
         published = _entry_datetime(entry)
         source = ""
         if origin == "bing":

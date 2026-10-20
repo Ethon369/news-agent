@@ -45,6 +45,8 @@ def _search_news(args: dict, ctx: ToolContext) -> ToolResult:
             f"   链接: {item.url}\n"
             f"   摘要: {item.summary[:160] or '(无摘要)'}"
         )
+    for item in items:
+        ctx.remember_url(item.url)  # 链接溯源：只有采集过的链接才允许写进简报
     return ToolResult.success("\n".join(lines), data=[item.to_dict() for item in items])
 
 
@@ -94,6 +96,11 @@ def _fetch_url(args: dict, ctx: ToolContext) -> ToolResult:
         return ToolResult.failure("正文抽取为空（可能是动态渲染页面）。建议改用摘要信息。", "empty_content")
 
     content = f"标题: {article.title}\n站点: {article.site or '未知'}\n链接: {article.url}\n正文:\n{article.text}"
+    # 链接溯源 + 证据分级：请求链接与重定向后的最终链接都算「已采集」，并标记已读正文
+    ctx.remember_url(url)
+    ctx.remember_url(article.url)
+    ctx.mark_fetched(url)
+    ctx.mark_fetched(article.url)
     return ToolResult.success(content, data=article.to_dict())
 
 

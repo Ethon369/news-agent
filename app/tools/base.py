@@ -70,8 +70,33 @@ class ToolContext:
     run_id: int | None = None
     news_service: Any = None
     briefing_payload: dict[str, Any] | None = None
+    # 本次运行中真实采集到的链接（search_news / fetch_url），用于 publish 的链接溯源校验
     committed_urls: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def remember_url(self, url: str) -> None:
+        """记录一条真实采集到的链接（归一化后去重）。"""
+        from app.news.dedup import normalize_url
+
+        key = normalize_url(url or "")
+        if key and key not in self.committed_urls:
+            self.committed_urls.append(key)
+
+    def mark_fetched(self, url: str) -> None:
+        """记录成功读取过正文的链接，用于生成证据分级。"""
+        from app.news.dedup import normalize_url
+
+        key = normalize_url(url or "")
+        if key:
+            self.extra.setdefault("fetched_urls", set()).add(key)
+
+    @property
+    def committed_url_set(self) -> set[str]:
+        return set(self.committed_urls)
+
+    @property
+    def fetched_url_set(self) -> set[str]:
+        return set(self.extra.get("fetched_urls") or set())
 
 
 class ToolHandler(Protocol):

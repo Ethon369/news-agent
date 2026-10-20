@@ -1926,6 +1926,25 @@ svg {
   font-weight: 700;
 }
 
+.item-evidence {
+  display: flex;
+  gap: 7px;
+  margin-top: 7px;
+  padding: 5px 9px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.item-evidence-label {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-weight: 700;
+  opacity: 0.85;
+}
+
 .item-tags {
   display: flex;
   flex-wrap: wrap;

@@ -100,6 +100,9 @@ def tool_ctx(test_settings: Settings, tmp_path: Path) -> ToolContext:
             "language": "zh",
             "channels": ["web"],
         },
+        # 夹具预置一条「已采集」链接，模拟 search_news 之后的上下文；
+        # 链接溯源单测会另外构造未采集 URL 验证拒绝逻辑。
+        committed_urls=["https://example.com/demo/1"],
     )
 
 

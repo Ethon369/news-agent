@@ -1247,6 +1247,13 @@
         ${metaBits.length ? `<p class="item-meta">${metaBits.join('')}</p>` : ''}
         ${item.summary ? `<p class="item-summary">${esc(item.summary)}</p>` : ''}
         ${
+          item.evidence_level
+            ? `<p class="item-evidence"><span class="item-evidence-label">证据范围</span><span>${esc(
+                item.evidence_level
+              )}</span></p>`
+            : ''
+        }
+        ${
           item.reason
             ? `<p class="item-reason"><span class="item-reason-label">入选理由</span><span>${esc(
                 item.reason

@@ -191,6 +191,7 @@ def briefing_item_to_dict(item) -> dict[str, Any]:
         "published_at": item.published_at,
         "summary": item.summary,
         "reason": item.reason,
+        "evidence_level": item.evidence_level,
         "tags": parse_json_list(item.tags),
         "score": item.score,
     }

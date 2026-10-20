@@ -21,6 +21,8 @@ def test_offline_end_to_end_run(database, user, test_settings):
         briefing = session.get(Briefing, run.briefing_id)
         assert briefing.item_count >= 1
         assert "https://example.com/ai-daily-demo/" in briefing.content_md
+        assert briefing.items and all(item.evidence_level for item in briefing.items)
+        assert "证据范围：" in briefing.content_md
 
         steps = sorted(run.steps, key=lambda step: step.step_index)
         assert steps
