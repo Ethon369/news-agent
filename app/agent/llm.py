@@ -116,6 +116,7 @@ class OpenAICompatibleLLM:
             "model": self.model,
             "messages": messages,
             "temperature": self.settings.llm_temperature,
+            "max_tokens": self.settings.llm_max_tokens,
         }
         if tools:
             payload["tools"] = tools

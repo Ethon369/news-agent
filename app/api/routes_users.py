@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session, get_settings_dep
@@ -65,9 +66,14 @@ def create_user(
         created_at=utcnow(),
     )
     session.add(user)
-    session.flush()
-    session.add(_default_subscription(settings, user.id))
-    session.commit()
+    try:
+        session.flush()
+        session.add(_default_subscription(settings, user.id))
+        session.commit()
+    except IntegrityError:
+        # 并发下 check-then-insert 会撞唯一约束：统一映射为 409，而不是 500
+        session.rollback()
+        raise ApiException(CODE_CONFLICT, f"邮箱 {payload.email} 已存在，直接选择该用户即可", 409) from None
     session.refresh(user)
     return ok(user_to_dict(user))
 

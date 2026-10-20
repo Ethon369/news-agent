@@ -18,13 +18,14 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
 from app.api import api_router
 from app.config import Settings, get_settings
 from app.db import Database
-from app.schemas import CODE_BAD_REQUEST, CODE_INTERNAL, ApiException, err
-from app.services.runner import AgentRunner
+from app.schemas import CODE_BAD_REQUEST, CODE_INTERNAL, CODE_NOT_FOUND, ApiException, err
+from app.services.runner import AgentRunner, mark_stale_runs
 from app.services.scheduler import DailyScheduler
 
 logging.basicConfig(
@@ -52,6 +53,9 @@ def create_app(
         applied = db.migrate()
         if applied:
             logger.info("applied migrations: %s", applied)
+        stale = mark_stale_runs(db)
+        if stale:
+            logger.warning("marked %s stale running agent_run(s) as failed", stale)
         settings.workspace_path.mkdir(parents=True, exist_ok=True)
         app.state.db = db
         app.state.settings = settings
@@ -88,6 +92,12 @@ def create_app(
             status_code=400,
             content=err(CODE_BAD_REQUEST, f"参数校验失败: {location} {message}".strip()),
         )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_exception(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        """404/405 等框架级异常也走统一信封（AI code review 发现的不一致）。"""
+        code = CODE_NOT_FOUND if exc.status_code == 404 else CODE_BAD_REQUEST
+        return JSONResponse(status_code=exc.status_code, content=err(code, str(exc.detail)))
 
     @app.exception_handler(Exception)
     async def handle_unexpected(_request: Request, exc: Exception) -> JSONResponse:

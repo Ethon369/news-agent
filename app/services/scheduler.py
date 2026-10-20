@@ -49,12 +49,9 @@ def due_user_ids(db: Database, now: datetime | None = None, tz: ZoneInfo | None 
         for user_id, push_time in rows:
             if not push_time or current_hhmm < push_time:
                 continue
+            # 今天只要已经跑过（手动或定时），调度就不再重复触发
             already = session.execute(
-                select(AgentRun.id)
-                .where(AgentRun.user_id == user_id)
-                .where(AgentRun.trigger == "schedule")
-                .where(AgentRun.started_at >= day_start)
-                .limit(1)
+                select(AgentRun.id).where(AgentRun.user_id == user_id).where(AgentRun.started_at >= day_start).limit(1)
             ).first()
             if already is None:
                 due.append(user_id)
@@ -64,6 +61,8 @@ def due_user_ids(db: Database, now: datetime | None = None, tz: ZoneInfo | None 
 
 
 def run_due_users(runner, db: Database, now: datetime | None = None, tz: ZoneInfo | None = None) -> list[int]:
+    # 统一使用应用配置的时区（AI code review 发现：之前硬编码 Asia/Shanghai）
+    tz = tz or ZoneInfo(getattr(getattr(runner, "settings", None), "app_timezone", "Asia/Shanghai"))
     triggered = []
     for user_id in due_user_ids(db, now=now, tz=tz):
         try:
@@ -104,7 +103,7 @@ class DailyScheduler:
 
     def _tick(self) -> None:
         try:
-            run_due_users(self.runner, self.db)
+            run_due_users(self.runner, self.db, tz=ZoneInfo(self.settings.app_timezone))
         except Exception:  # noqa: BLE001 - 调度器必须活着
             logger.exception("scheduler tick failed")
 

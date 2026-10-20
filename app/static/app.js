@@ -1388,11 +1388,13 @@
       renderBriefings();
       return false;
     }
+    const requestUserId = state.currentUserId;
     state.briefingsLoading = true;
     state.briefingsError = null;
     renderBriefings();
     try {
-      const list = await api.briefings(state.currentUserId, 20, 0);
+      const list = await api.briefings(requestUserId, 20, 0);
+      if (state.currentUserId !== requestUserId) return false; // 身份已切换，丢弃过期响应
       state.briefings = Array.isArray(list) ? list : [];
       state.briefingsLoading = false;
       const ids = state.briefings.map((item) => String(item.id));
@@ -1800,13 +1802,15 @@
       return;
     }
     if (state.busy.run || isRunActive()) return;
+    const runUserId = state.user.id;
     setTab('run');
     resetRunPanel();
     state.busy.run = true;
     state.run.startedAt = Date.now();
     updateRunButton();
     try {
-      const response = await api.startRun(state.user.id);
+      const response = await api.startRun(runUserId);
+      if (!state.user || state.user.id !== runUserId) return; // 期间切换了身份，丢弃本次运行结果
       const runId = response && (response.run_id != null ? response.run_id : response.id);
       if (runId == null) throw new ApiError('后端没有返回 run_id。', -1, 200);
       state.run.id = runId;

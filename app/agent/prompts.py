@@ -38,8 +38,9 @@ list_dir / read_file / search_content / write_file / bash / search_news / fetch_
 """
 
 FORCE_FINAL_PROMPT = (
-    "工具调用步数已达到上限。请立刻停止调用工具，基于已经获得的信息调用 publish_briefing 提交最终简报；"
-    "如果信息确实不足，请提交你能确认的条目，并在 summary 中说明信息有限。"
+    "工具调用步数或 token 预算已达到上限。你现在只能调用 publish_briefing 提交最终简报，"
+    "不能再做新的检索。请基于已经获得的信息提交：如果信息确实不足，就提交你能确认的条目，"
+    "并在 summary 中说明信息有限。"
 )
 
 

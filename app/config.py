@@ -41,7 +41,9 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.3
     llm_timeout_seconds: int = 90
     llm_mode: str = "real"  # real | mock
+    llm_max_tokens: int = 1200
     agent_max_steps: int = 24
+    agent_token_budget: int = 150_000
 
     # ---------- 新闻源 ----------
     news_bing_enabled: bool = True
