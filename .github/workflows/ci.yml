@@ -25,11 +25,8 @@ jobs:
       - name: Environment info
         run: |
           python -V
-          python -m pip -V
           python -m pytest --version
           python -m ruff --version
-          ls -la
-          ls -la tests
 
       - name: Lint
         run: python -m ruff check app tests
@@ -44,7 +41,11 @@ jobs:
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
             echo "::error::pytest failed with exit code $code"
-            echo "----- pytest log tail -----"
-            tail -n 80 /tmp/pytest.log
+            echo "----- failed tests -----"
+            grep -E "^(FAILED|ERROR)" /tmp/pytest.log | head -20 | while IFS= read -r line; do
+              echo "::error title=FailedTest::$line"
+            done
+            echo "----- traceback tail -----"
+            tail -n 120 /tmp/pytest.log
             exit "$code"
           fi
