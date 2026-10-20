@@ -262,6 +262,7 @@ erDiagram
 | 简报引用了未采集的链接 | 拒绝发布（`invalid_briefing`）并回喂模型：链接必须来自本次 search_news/fetch_url 结果 |
 | 推送渠道未配置 | `deliveries.status=skipped`，不影响简报落库 |
 | 推送网络失败 | 事务外逐渠道发送，失败记 `deliveries.status=failed`，不影响已落库简报 |
+| 同日重复推送 | 外部渠道（email/feishu）检查当天是否已成功发送，命中则记 `skipped（每日限 1 封）`；web 始终记录 |
 | 步数/token 超限 | 注入收尾提示，只暴露 `publish_briefing` 让模型仍能提交；否则明确失败原因 |
 | 同一用户重复触发 | 进程内按用户加锁；已有运行中任务则复用/拒绝，不双开 |
 | 进程重启遗留 running | 启动时批量标记 failed（`mark_stale_runs`），前端不会无限轮询 |

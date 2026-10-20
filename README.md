@@ -92,6 +92,7 @@ LLM_MODEL=deepseek-chat
 | Agent 自主研究 | 模型自行决定：查历史归档 → 检索新闻 → 补搜 → 抓正文 → 写草稿 → 提交 |
 | 每日自动运行 | 内置 APScheduler，每 5 分钟 tick，到点只为「今天还没跑过」的用户触发 |
 | 多通道推送 | 站内（默认）、飞书群机器人 Webhook、SMTP 邮件；失败降级不影响主流程 |
+| 日报式邮件 | 主题 `AI 每日简报｜10月20日：<当日头条>`；正文品牌头 + 编号条目 + 证据范围；**同一用户每天最多 1 封外部推送** |
 | 去重闭环 | URL 归一化 + 标题近似 + 历史归档 `search_content` 三路去重；全部重复时输出「今日无新增」 |
 | **链接溯源** | 每条简报链接必须来自本次运行 `search_news` / `fetch_url` 的真实采集结果，模型无法编造或引用未采集链接 |
 | **证据分级** | 每条新闻标注「已读取原网页正文片段 / 仅来源摘要 / 仅标题」并落库展示，读者能判断摘要可信度 |
@@ -199,6 +200,7 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 | `NEWS_RSS_FEEDS` | HN/arXiv/TechCrunch/机器之心 | 逗号分隔，随意增删 |
 | `NEWS_ALLOW_FAKE_IP` | `false` | Clash/Surge 等 Fake-IP 代理（198.18.0.0/15）下抓正文需设为 `true` |
 | `PUSH_CHANNELS` | `web` | 服务端允许的推送渠道（web 始终可用） |
+| `DELIVERY_DAILY_LIMIT` | `true` | 同一用户每天最多一封外部推送（email/feishu），避免手动+定时重复刷屏 |
 | `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET` | 空 | 飞书群机器人 |
 | `SMTP_*` | 空 | 邮件推送（需用户填邮箱） |
 | `SCHEDULER_ENABLED` | `true` | 每日定时任务开关 |
@@ -222,7 +224,8 @@ SMTP_USE_SSL=true
 ```
 
 3. 用户表里的 `email` 字段需要填写同一个邮箱（前端「新建身份」时填写，或对已有身份重新创建）；
-4. 运行后会收到一封 HTML 简报邮件；若发送失败只会在 `deliveries` 里记 `failed`，不影响简报落库。
+4. 运行后会收到一封日报式 HTML 邮件（主题形如 `AI 每日简报｜10月20日：<当日头条>`，正文含品牌头、编号条目与证据范围）；同一用户每天最多 1 封外部推送，之后的手动运行只写站内；
+5. 若发送失败只会在 `deliveries` 里记 `failed`，不影响简报落库。
    注意：QQ 邮箱有发送频率限制，连续高频触发可能被临时限流。
 
 ---
@@ -231,7 +234,7 @@ SMTP_USE_SSL=true
 
 ```bash
 pip install -r requirements-dev.txt
-pytest            # 132 个用例，全部离线（不依赖网络与真实 LLM）
+pytest            # 138 个用例，全部离线（不依赖网络与真实 LLM）
 ruff check app    # 代码规范
 ```
 
