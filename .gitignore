@@ -36,3 +36,7 @@ Thumbs.db
 # Demo artifacts (keep directory, ignore heavy output by default)
 demo/*.webm
 demo/*.mp4
+
+# Demo raw recordings / frames (keep only final demo artifacts)
+docs/demo/raw/
+docs/demo/frames/

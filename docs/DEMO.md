@@ -25,16 +25,17 @@ python -m app serve --port 8000
 node scripts/record_demo.mjs
 ```
 
-产物：`docs/demo/raw/*.webm`（Playwright 原始录制）。
+产物：`docs/demo/raw/*.webm`（Playwright 原始录制），本仓库最终视频为 `docs/demo/ai-daily-demo.webm`（1 分 38 秒）。
 
-转换为 mp4（Windows 自带 ffmpeg 在 ms-playwright 缓存里）：
-
-```bash
-# 找到 ffmpeg
-%LOCALAPPDATA%\ms-playwright\ffmpeg-*/ffmpeg-win64.exe
-# 转码
-ffmpeg -i docs/demo/raw/<video>.webm -c:v libx264 -pix_fmt yuv420p -movflags +faststart docs/demo/ai-daily-demo.mp4
-```
+> 注：Playwright 自带的 ffmpeg 是精简版（只含 VP8/WebM 编码），无法直接转 mp4。
+> 如需 mp4，可用系统安装的完整 ffmpeg：
+>
+> ```bash
+> ffmpeg -i docs/demo/ai-daily-demo.webm -c:v libx264 -crf 26 -pix_fmt yuv420p \
+>        -movflags +faststart docs/demo/ai-daily-demo.mp4
+> ```
+>
+> .webm 可直接用 Chrome/Edge/Firefox 打开，无需转码。
 
 ## 2. 时间轴与旁白
 
