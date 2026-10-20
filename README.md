@@ -93,7 +93,7 @@ LLM_MODEL=deepseek-chat
 | 去重闭环 | URL 归一化 + 标题近似 + 历史归档 `search_content` 三路去重；全部重复时输出「今日无新增」 |
 | 可观测 | 运行表 / 轨迹表 / 推送表全链路落库，前端逐步回放 + Token 统计 |
 | 离线演示 | `LLM_MODE=mock`：确定性脚本模型 + 内置演示新闻源，零密钥、零外网也能跑通 |
-| 安全 | 文件工具目录 jail、bash 白名单 + 无 shell 组合子、密钥只走环境变量 |
+| 安全 | 文件工具目录 jail、bash 白名单 + 无 shell 组合子、`fetch_url` SSRF 防护（仅公网 + 重定向逐跳校验）、密钥只走环境变量 |
 
 ---
 
@@ -174,6 +174,7 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 | `LLM_MODE=mock` 离线模式 | 评审零密钥可体验完整链路；CI 稳定免费 | [ADR-0004](docs/ADR/0004-mock-llm-offline-mode.md) |
 | RSS + Bing News RSS 免密钥 | 不依赖第三方搜索 API；模型自己决定 query 与轮次 | [ADR-0005](docs/ADR/0005-news-source-strategy.md) |
 | 推送可插拔 + 失败降级 | 推送不应浪费一次已成功的运行；未配置渠道记 `skipped` | [ADR-0006](docs/ADR/0006-pluggable-push-channels.md) |
+| **AI 代码审查后加固** | 首版由 AI 写完后用独立子 Agent 审查，修复 2 个 P1（git 参数绕过、SSRF）+ 多个 P2（推送阻塞事务、强制收敛失效、时区、并发、信封一致性等） | [ADR-0007](docs/ADR/0007-security-hardening.md) |
 
 ---
 
@@ -202,7 +203,7 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 
 ```bash
 pip install -r requirements-dev.txt
-pytest            # 85+ 用例，全部离线（不依赖网络与真实 LLM）
+pytest            # 104 个用例，全部离线（不依赖网络与真实 LLM）
 ruff check app    # 代码规范
 ```
 

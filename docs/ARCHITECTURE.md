@@ -99,7 +99,7 @@ else:
 | 设计点 | 做法 | 目的 |
 |---|---|---|
 | 决策权在模型 | 每轮把工具 schema + 偏好 + 历史摘要交给模型，`tool_choice="auto"` | 顺序、次数、停止由 LLM 决定 |
-| 硬边界在框架 | `AGENT_MAX_STEPS`、单工具超时、单条结果截断、总 token 预算 | 防死循环/失控 |
+| 硬边界在框架 | `AGENT_MAX_STEPS`、`AGENT_TOKEN_BUDGET`、`LLM_MAX_TOKENS`、单工具超时、单条结果截断 | 防死循环/失控/成本爆炸 |
 | 停止信号 | 模型不再发 tool_calls，或调用 `publish_briefing` 成功 | 两种自然结束方式 |
 | 轨迹可观测 | 每步落库 `agent_steps`，SSE 轮询给前端 | 评审肉眼验证「LLM 决定顺序」 |
 | 可替换模型 | `app/agent/llm.py` 只依赖 OpenAI 兼容协议 | DeepSeek/OpenAI/Qwen 可换 |
@@ -256,19 +256,27 @@ erDiagram
 | LLM 超时/429 | 指数退避重试 3 次；仍失败 → `agent_run.status=failed`，错误落库，前端可见 |
 | 单个新闻源失败 | 记日志继续；其余源照常 |
 | 抓取正文失败 | 返回标题+摘要+链接，提示模型"正文不可用，摘要需保守" |
+| 目标 URL 为内网/回环/元数据地址 | `assert_public_url` 拒绝（含每一跳重定向），返回结构化错误给模型 |
 | `publish_briefing` 参数非法 | 返回结构化错误给模型，让模型自行修正重试 |
 | 推送渠道未配置 | `deliveries.status=skipped`，不影响简报落库 |
-| 步数超限 | 注入收尾提示，强制模型输出最终简报或明确失败原因 |
+| 推送网络失败 | 事务外逐渠道发送，失败记 `deliveries.status=failed`，不影响已落库简报 |
+| 步数/token 超限 | 注入收尾提示，只暴露 `publish_briefing` 让模型仍能提交；否则明确失败原因 |
+| 同一用户重复触发 | 进程内按用户加锁；已有运行中任务则复用/拒绝，不双开 |
+| 进程重启遗留 running | 启动时批量标记 failed（`mark_stale_runs`），前端不会无限轮询 |
 | 数据库不可用 | 启动时 migration 失败即快速失败（fail fast），避免半可用状态 |
 
 ## 7. 安全清单
 
 - [x] 密钥只从环境变量读取，`.env` 被 gitignore；
-- [x] 文件工具目录 jail + 路径归一化 + 符号链接检查；
-- [x] bash 白名单 + 禁止 shell 组合子 + 超时 + 输出截断；
-- [x] 抓取外部 URL 时限制协议（http/https）、超时、最大字节；
-- [x] LLM 输出视为不可信输入：工具参数一律 JSON Schema 校验；
-- [x] 前端渲染 Markdown 时做 HTML 转义（防 XSS）。
+- [x] 文件工具目录 jail + 路径归一化 + 符号链接检查（含 `search_content` 先校验后读取）；
+- [x] bash 白名单 + 禁止 shell 组合子 + 超时 + 输出截断；git 子命令做 token 级白名单（移除接触路径的 diff/show）；
+- [x] `fetch_url` SSRF 防护：仅公网 http(s)，DNS 解析结果校验，重定向逐跳校验；
+- [x] 推送在数据库事务外执行，逐渠道短事务记账，避免长时间持锁与状态不一致；
+- [x] LLM 输出视为不可信输入：工具参数一律 JSON Schema 校验；邮件 HTML 全字段转义、链接协议白名单；
+- [x] 前端渲染 Markdown 时先整体转义再解析（仅白名单标签），身份切换时丢弃过期响应；
+- [x] 框架级 404/405 也返回统一信封，避免契约不一致。
+
+> 安全加固的完整背景、取舍与残留风险见 [ADR-0007](ADR/0007-security-hardening.md)。
 
 ## 8. 目录结构
 
