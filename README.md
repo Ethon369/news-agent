@@ -2,6 +2,8 @@
 
 > 选项 A（Agent Loop）交付仓库
 >
+[![CI](https://github.com/Ethon369/news-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Ethon369/news-agent/actions/workflows/ci.yml)
+
 > 一个**由 LLM 自主决定工具调用顺序**的新闻简报 Agent：按用户订阅偏好，每天检索、筛选、核实并撰写一份 AI 新闻简报，支持站内 / 飞书 / 邮件推送。
 
 ![界面预览](docs/screenshots/ui-desktop.png)
@@ -224,7 +226,7 @@ SMTP_USE_SSL=true
 
 ```bash
 pip install -r requirements-dev.txt
-pytest            # 104 个用例，全部离线（不依赖网络与真实 LLM）
+pytest            # 115 个用例，全部离线（不依赖网络与真实 LLM）
 ruff check app    # 代码规范
 ```
 

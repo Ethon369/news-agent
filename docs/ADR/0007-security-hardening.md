@@ -60,3 +60,13 @@
 | 无检索预算 | 模型可能调用十几次 `search_news`，成本与耗时不可控 | 系统提示加入「search_news 最多 5 次、够 5 条候选就收尾」；框架层再用 `AGENT_TOKEN_BUDGET=500000` 兜底 |
 
 效果：修复前 13 轮 / 24 次工具调用 / 58s / 122K tokens；修复后 9 轮 / 15 次 / 33s / 72K tokens，且失败率明显下降。
+
+## 补充二：CI（Linux）暴露的跨平台路径 jail 缺口
+
+本地 Windows 全绿，但 GitHub Actions（Ubuntu）上 `test_paths_outside_workspace_are_rejected[C:/Windows/win.ini]` 失败：
+
+- 根因：Linux 上 `Path("C:/Windows/win.ini")` **不是绝对路径**（没有盘符概念），会作为相对路径拼到 workspace 下，绕过「绝对路径」前置校验，最终以 `unsupported_file_type` 失败；在 Windows 上则被 `is_absolute()` 拦住；
+- 影响：如果模型在 Linux 主机上尝试 Windows 风格路径，会进入 workspace 的异常子目录，虽未逃逸，但沙箱语义与跨平台一致性被破坏；
+- 修复：`resolve_workspace_path` 显式拒绝盘符路径（`C:/`、`C:\`）、UNC（`//`、`\\`、`\\?\`、`\\.\`）与 NUL 字节，并新增 5 个跨平台回归用例。
+
+这件事本身也是很好的工程案例：**本地测试全绿 ≠ 跨平台正确，CI 的价值就是替你发现环境差异**，而 AI 生成的测试同样可能只覆盖开发机平台。
