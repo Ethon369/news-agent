@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f6fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e0d16" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="AI Daily：每天自动整理一份只包含你关心话题的 AI 新闻简报，并公开 Agent 的完整运行轨迹。">
+  <title>AI Daily · 每日 AI 新闻助手</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237C3AED'/%3E%3Cpath d='M16 6.5l2.6 6.9 6.9 2.6-6.9 2.6L16 25.5l-2.6-6.9L6.5 16l6.9-2.6L16 6.5z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-brand-row">
+        <a class="brand" href="./" aria-label="AI Daily 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M11.2 2.8l2.2 5.7 5.7 2.2-5.7 2.2-2.2 5.7-2.2-5.7-5.7-2.2 5.7-2.2 2.2-5.7z" fill="currentColor"/>
+              <path d="M18.4 15.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8.8-2.1z" fill="currentColor" opacity=".6"/>
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">AI Daily</span>
+            <span class="brand-sub">每日 AI 新闻助手</span>
+          </span>
+        </a>
+        <span id="llm-badge" class="badge badge-muted" title="正在读取模型配置">
+          <span class="badge-dot" aria-hidden="true"></span>
+          <span id="llm-badge-text">读取模型配置…</span>
+        </span>
+      </div>
+
+      <div class="topbar-controls">
+        <div class="user-switcher" id="user-switcher" hidden>
+          <label class="sr-only" for="user-select">当前身份</label>
+          <div class="select-wrap">
+            <select id="user-select" class="select select-sm"></select>
+            <span class="select-caret" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </div>
+        </div>
+        <button id="new-user-btn" class="btn btn-ghost btn-sm" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          <span>新建身份</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="layout" tabindex="-1">
+    <section class="panel profile-panel" aria-labelledby="profile-heading">
+      <div class="panel-head">
+        <div class="panel-head-text">
+          <h1 id="profile-heading" class="panel-title">身份与订阅</h1>
+          <p class="panel-sub">偏好决定 Agent 检索什么、留下什么。</p>
+        </div>
+        <span class="panel-badge" id="profile-badge" hidden></span>
+      </div>
+      <div class="panel-body" id="profile-body">
+        <div class="skeleton-stack" aria-hidden="true">
+          <div class="skeleton skeleton-row">
+            <div class="skeleton skeleton-avatar"></div>
+            <div class="skeleton-lines">
+              <div class="skeleton skeleton-line w-60"></div>
+              <div class="skeleton skeleton-line w-40"></div>
+            </div>
+          </div>
+          <div class="skeleton skeleton-line w-40"></div>
+          <div class="skeleton skeleton-block"></div>
+          <div class="skeleton skeleton-line w-60"></div>
+          <div class="skeleton skeleton-block"></div>
+          <div class="skeleton skeleton-line w-40"></div>
+          <div class="skeleton skeleton-block"></div>
+        </div>
+      </div>
+      <div class="panel-actions" id="profile-actions" hidden>
+        <span class="form-note" id="prefs-note">保存后立即生效</span>
+        <button type="submit" form="prefs-form" class="btn btn-primary" id="save-prefs">保存偏好</button>
+      </div>
+    </section>
+
+    <section class="panel work-panel" aria-labelledby="work-heading">
+      <h2 id="work-heading" class="sr-only">简报与运行</h2>
+
+      <div class="tabs" role="tablist" aria-label="内容视图">
+        <button id="tab-briefings" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel-briefings" tabindex="0">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <span>历史简报</span>
+          <span class="tab-count" id="briefings-count">—</span>
+        </button>
+        <button id="tab-run" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-run" tabindex="-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+          <span>运行轨迹</span>
+          <span class="tab-status-dot" id="run-dot" hidden aria-hidden="true"></span>
+        </button>
+        <div class="tabs-space"></div>
+        <button id="refresh-briefings" class="btn btn-icon btn-ghost" type="button" aria-label="刷新历史简报" title="刷新历史简报">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        </button>
+      </div>
+
+      <div id="panel-briefings" class="tabpanel briefing-layout" role="tabpanel" aria-labelledby="tab-briefings" tabindex="0">
+        <div class="briefing-list-col">
+          <div class="list-head">
+            <span class="list-title">最近简报</span>
+            <span class="list-hint" id="briefings-hint"></span>
+          </div>
+          <div id="briefing-list" class="briefing-list">
+            <div class="skeleton-stack" aria-hidden="true">
+              <div class="skeleton skeleton-item"></div>
+              <div class="skeleton skeleton-item"></div>
+              <div class="skeleton skeleton-item"></div>
+            </div>
+          </div>
+        </div>
+        <div class="briefing-detail-col">
+          <div id="briefing-detail" class="briefing-detail">
+            <div class="empty empty-lg">
+              <span class="empty-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
+              </span>
+              <p class="empty-title">选择一份简报</p>
+              <p class="empty-desc">左侧列出了这个身份的历史简报；点击任意一份查看正文、入选新闻与推送记录。</p>
+              <button class="btn btn-ghost btn-sm" type="button" data-action="open-run-tab">去运行一次 Agent</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panel-run" class="tabpanel panel-run" role="tabpanel" aria-labelledby="tab-run" tabindex="0" hidden>
+        <div class="run-toolbar">
+          <div class="run-toolbar-main">
+            <button id="run-btn" class="btn btn-primary btn-lg" type="button">
+              <span class="btn-icon-slot" aria-hidden="true">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.2c0-.8.9-1.3 1.6-.9l9.2 6.1c.6.4.6 1.3 0 1.7l-9.2 6.1c-.7.4-1.6-.1-1.6-.9V5.2z"/></svg>
+              </span>
+              <span id="run-btn-text">立即生成简报</span>
+            </button>
+            <p class="run-toolbar-hint">Agent 自主决定工具调用顺序：查历史 → 搜新闻 → 抓正文 → 撰写 → 发布。每一步都会实时出现在下方轨迹里。</p>
+          </div>
+          <div class="run-toolbar-side">
+            <div class="run-status" id="run-status" aria-live="polite">
+              <span class="badge badge-neutral"><span class="badge-dot" aria-hidden="true"></span>待运行</span>
+            </div>
+            <p class="run-meta" id="run-meta" hidden></p>
+          </div>
+        </div>
+
+        <div class="run-stats" id="run-stats" hidden></div>
+        <div class="run-alert" id="run-alert" hidden></div>
+
+        <div class="run-scroll" id="run-scroll">
+          <ol id="run-steps" class="timeline" aria-label="运行步骤"></ol>
+          <div id="run-empty" class="run-empty">
+            <div class="run-intro">
+              <div class="run-intro-head">
+                <span class="empty-icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+                </span>
+                <div>
+                  <p class="empty-title">还没有运行记录</p>
+                  <p class="empty-desc">点击「立即生成简报」后，页面每 1.2 秒拉取一次运行状态，逐步追加模型的思考与工具调用。</p>
+                </div>
+              </div>
+              <ul class="run-playbook">
+                <li><span class="playbook-num">01</span><span>读取历史归档，判断哪些选题已经讲过</span></li>
+                <li><span class="playbook-num">02</span><span>按偏好检索多个新闻源，拿到候选列表</span></li>
+                <li><span class="playbook-num">03</span><span>抓取重点链接正文，核实细节后撰写简报</span></li>
+                <li><span class="playbook-num">04</span><span>调用发布工具落库，并记录各渠道推送结果</span></li>
+              </ul>
+              <p class="hint">可以看到每次决策的 <span class="mono">thought</span>、工具名、参数、观测结果与耗时。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-region" class="toast-region" role="region" aria-label="通知" aria-live="polite"></div>
+
+  <dialog id="new-user-dialog" class="dialog" aria-labelledby="new-user-dialog-title">
+    <div class="dialog-head">
+      <h2 id="new-user-dialog-title" class="dialog-title">新建身份</h2>
+      <button type="button" class="btn btn-icon btn-ghost" data-action="close-dialog" aria-label="关闭新建身份对话框">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="dialog-create-form" class="dialog-body" novalidate>
+      <p class="hint dialog-intro">身份用于隔离订阅偏好与历史简报，保存在本地，不需要注册或登录。</p>
+      <div class="field">
+        <label for="dialog-name">称呼 <span class="req">必填</span></label>
+        <input id="dialog-name" name="name" class="input" type="text" maxlength="40" autocomplete="name" placeholder="例如：张三" required>
+      </div>
+      <div class="field">
+        <label for="dialog-email">邮箱 <span class="optional">可选</span></label>
+        <input id="dialog-email" name="email" class="input" type="email" maxlength="120" autocomplete="email" placeholder="zhang@example.com" aria-describedby="dialog-email-hint">
+        <p id="dialog-email-hint" class="hint">用于邮件推送；留空则只接收站内简报。</p>
+      </div>
+      <p class="form-error" id="dialog-create-error" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-action="close-dialog">取消</button>
+        <button type="submit" class="btn btn-primary" id="dialog-create-submit">创建身份</button>
+      </div>
+    </form>
+  </dialog>
+
+  <noscript>
+    <div class="noscript">AI Daily 需要启用 JavaScript 才能加载身份、历史简报与运行轨迹。</div>
+  </noscript>
+
+  <script src="dev-mock.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
