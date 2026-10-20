@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -106,12 +107,18 @@ def to_json(data: Any) -> str:
 _FORBIDDEN_SEGMENTS = {".."}
 
 
+_WINDOWS_ABSOLUTE_RE = re.compile(r"^[A-Za-z]:[\\/]")
+_UNC_PREFIXES = ("//", "\\\\", "\\?\\", "\\\\.\\")
+
+
 def resolve_workspace_path(workspace: Path, raw_path: str) -> Path:
     """把模型给的路径解析为 workspace 内的绝对路径，越界即拒绝。
 
     规则：
     - 空路径视为 workspace 根；
     - 拒绝绝对路径与 ``..`` 段（即便最终仍在根内，也一律拒绝，减少歧义）；
+    - **跨平台**拒绝 Windows 盘符/UNC 路径（Linux 上 ``C:/x`` 会被 Path 视为相对路径，
+      若不显式判断会绕进 workspace，CI 的 Linux 测试抓到了这个缺口）；
     - resolve() 后必须仍在 workspace 内，防符号链接逃逸。
     """
     if raw_path is None:
@@ -121,9 +128,15 @@ def resolve_workspace_path(workspace: Path, raw_path: str) -> Path:
     candidate = raw_path.strip().replace("\\", "/")
     if candidate in {"", ".", "./"}:
         candidate = "."
-    path = Path(candidate)
-    if path.is_absolute():
+
+    if Path(candidate).is_absolute() or _WINDOWS_ABSOLUTE_RE.match(candidate):
         raise ToolError(f"不允许绝对路径: {raw_path}", "absolute_path_denied")
+    if candidate.startswith(_UNC_PREFIXES):
+        raise ToolError(f"不允许 UNC/网络路径: {raw_path}", "absolute_path_denied")
+    if "\x00" in candidate:
+        raise ToolError("路径包含非法字符", "bad_argument")
+
+    path = Path(candidate)
     if any(part in _FORBIDDEN_SEGMENTS for part in path.parts):
         raise ToolError(f"不允许路径穿越: {raw_path}", "path_traversal_denied")
 

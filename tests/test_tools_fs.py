@@ -50,6 +50,23 @@ def test_paths_outside_workspace_are_rejected(tool_ctx, path):
     assert result.code in {"path_traversal_denied", "absolute_path_denied", "out_of_workspace"}
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "C:/Windows/win.ini",
+        "C:\\Windows\\win.ini",
+        "D:\\secret\\x.md",
+        "\\\\server\\share\\x.md",
+        "//server/share/x.md",
+    ],
+)
+def test_windows_style_absolute_paths_rejected_on_every_platform(tool_ctx, path):
+    """跨平台回归：Linux 上 Path('C:/x') 是相对路径，必须显式拒绝 Windows 盘符/UNC。"""
+    result = _call(write_file_tool(), {"path": path, "content": "x"}, tool_ctx)
+    assert not result.ok
+    assert result.code == "absolute_path_denied", f"{path} -> {result.code}"
+
+
 def test_symlink_escape_is_rejected(tool_ctx, tmp_path):
     outside = tmp_path / "secret.md"
     outside.write_text("top secret", encoding="utf-8")
