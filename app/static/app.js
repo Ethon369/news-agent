@@ -1769,6 +1769,11 @@
           await loadBriefings({ openId: data.briefing_id });
           const tab = $('#tab-briefings');
           if (tab) tab.focus({ preventScroll: true });
+          // 推送在数据库事务外异步记账，稍后再拉一次以展示「站内/邮件」最新推送状态
+          window.setTimeout(() => {
+            if (state.currentUserId == null) return;
+            loadBriefings({ keepActive: true, silent: true }).catch(() => {});
+          }, 1800);
         } else {
           await loadBriefings({ keepActive: false });
         }
