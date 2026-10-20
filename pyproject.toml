@@ -1,0 +1,20 @@
+[project]
+name = "ai-daily-agent"
+version = "0.1.0"
+description = "每日 AI 新闻助手 Agent —— 基于 LLM 自主工具调用的个性化新闻简报"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+exclude = [".venv", "workspace", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]

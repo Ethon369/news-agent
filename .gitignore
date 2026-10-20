@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+data/
+*.db
+*.sqlite3
+logs/
+workspace/archive/
+workspace/cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Demo artifacts (keep directory, ignore heavy output by default)
+demo/*.webm
+demo/*.mp4
