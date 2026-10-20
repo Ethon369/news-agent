@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -20,8 +21,9 @@ from app.models import Subscription, User, utcnow  # noqa: E402
 from app.schemas import dump_json_list  # noqa: E402
 from app.services.runner import AgentRunner  # noqa: E402
 
-DEMO_EMAIL = "linyue@example.com"
-DEMO_NAME = "林悦"
+# 演示身份，可用环境变量覆盖（例如填自己的 QQ 邮箱，便于验证邮件推送）
+DEMO_NAME = os.environ.get("DEMO_NAME", "林悦")
+DEMO_EMAIL = os.environ.get("DEMO_EMAIL", "linyue@example.com")
 
 
 def ensure_demo_user() -> tuple[int, str]:
@@ -32,6 +34,8 @@ def ensure_demo_user() -> tuple[int, str]:
     try:
         user = session.query(User).filter(User.email == DEMO_EMAIL).one_or_none()
         channels = ["web"]
+        if settings.smtp_host and settings.smtp_user:
+            channels.append("email")
         if settings.feishu_webhook_url:
             channels.append("feishu")
         if user is None:
@@ -55,7 +59,7 @@ def ensure_demo_user() -> tuple[int, str]:
             session.commit()
             print(f"已创建演示身份：{DEMO_NAME} <{DEMO_EMAIL}> id={user.id} channels={channels}")
         else:
-            print(f"演示身份已存在：id={user.id}")
+            print(f"演示身份已存在：id={user.id} email={user.email} channels={channels}")
         return user.id, channels
     finally:
         session.close()

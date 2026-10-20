@@ -199,6 +199,25 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 
 **飞书推送配置**：飞书群 → 群设置 → 群机器人 → 添加自定义机器人 → 复制 Webhook 地址填入 `FEISHU_WEBHOOK_URL`（如开启签名校验，同时填 `FEISHU_SECRET`）。
 
+**QQ 邮箱推送配置**（本项目演示使用的方式）：
+
+1. QQ 邮箱网页版 → 设置 → 账户 → 开启「IMAP/SMTP 服务」，按提示生成**授权码**（不是 QQ 登录密码）；
+2. 编辑 `.env`（或运行 `python scripts/configure_env.py --qq-email <邮箱> --qq-auth <授权码> --push-channels web,email`）：
+
+```ini
+PUSH_CHANNELS=web,email
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=你的QQ邮箱@qq.com
+SMTP_PASSWORD=邮箱授权码
+SMTP_FROM=你的QQ邮箱@qq.com
+SMTP_USE_SSL=true
+```
+
+3. 用户表里的 `email` 字段需要填写同一个邮箱（前端「新建身份」时填写，或对已有身份重新创建）；
+4. 运行后会收到一封 HTML 简报邮件；若发送失败只会在 `deliveries` 里记 `failed`，不影响简报落库。
+   注意：QQ 邮箱有发送频率限制，连续高频触发可能被临时限流。
+
 ---
 
 ## 7. 测试
