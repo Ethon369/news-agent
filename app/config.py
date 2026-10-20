@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     news_language: str = "zh-CN"
     news_rss_feeds: str = ""
     news_max_articles: int = 30
+    # Clash/Surge 等代理的 Fake-IP（198.18.0.0/15）：默认拒绝；显式开启后仅放行该段
+    news_allow_fake_ip: bool = False
 
     # ---------- 推送 ----------
     push_channels: str = "web"

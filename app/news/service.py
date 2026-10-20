@@ -120,7 +120,12 @@ class NewsService:
 
     # ------------------------------------------------------------------
     def fetch(self, url: str, max_chars: int = 4000) -> Article:
-        return fetch_article(url, max_chars=max_chars, client=self._client)
+        return fetch_article(
+            url,
+            max_chars=max_chars,
+            client=self._client,
+            allow_fake_ip=self.settings.news_allow_fake_ip,
+        )
 
     def close(self) -> None:
         if self._client is not None:

@@ -33,24 +33,40 @@ class UnsafeURLError(ValueError):
     """目标 URL 不是公网可访问地址（SSRF 防护）。"""
 
 
-def _is_public_ip(raw_ip: str) -> bool:
+_FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
+
+
+def _is_fake_ip(raw_ip: str) -> bool:
+    try:
+        return ipaddress.ip_address(raw_ip.split("%", 1)[0]) in _FAKE_IP_NETWORK
+    except ValueError:
+        return False
+
+
+def _is_public_ip(raw_ip: str, allow_fake_ip: bool = False) -> bool:
     try:
         ip = ipaddress.ip_address(raw_ip.split("%", 1)[0])
     except ValueError:
         return False
+    if allow_fake_ip and ip in _FAKE_IP_NETWORK:
+        # 代理软件（Clash/Surge 等）的 Fake-IP：DNS 被接管，真实目标由代理解析。
+        # 这是显式开启的兼容模式，默认关闭；其余私网地址仍然拒绝。
+        return True
     if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
         return False
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        return _is_public_ip(str(ip.ipv4_mapped))
+        return _is_public_ip(str(ip.ipv4_mapped), allow_fake_ip=allow_fake_ip)
     return True
 
 
-def assert_public_url(url: str) -> None:
+def assert_public_url(url: str, allow_fake_ip: bool = False) -> None:
     """校验 URL 只指向公网 http(s) 地址，否则抛 UnsafeURLError。
 
     - 拒绝非 http(s) 协议、缺失主机名；
     - 拒绝 localhost / *.local / *.internal / 云元数据主机名；
     - 对域名做 DNS 解析，逐个检查解析出的 IP（含 IPv6），拒绝私网/回环/链路本地/保留地址；
+    - ``allow_fake_ip=True`` 时放过 198.18.0.0/15（Clash 等代理的 Fake-IP 段），
+      代价是此时无法在本机校验真实目标 IP，需由代理层保证出口；默认关闭；
     - 注意：DNS pinning 仍非绝对（存在 rebinding 窗口），生产环境应配合出口代理白名单。
     """
     parts = urlsplit(url or "")
@@ -72,7 +88,7 @@ def assert_public_url(url: str) -> None:
         raise UnsafeURLError(f"域名无解析结果: {host}")
     for info in infos:
         ip_text = str(info[4][0])
-        if not _is_public_ip(ip_text):
+        if not _is_public_ip(ip_text, allow_fake_ip=allow_fake_ip):
             raise UnsafeURLError(f"拒绝访问内网/保留地址: {host} -> {ip_text}")
 
 
@@ -139,7 +155,12 @@ def extract_from_html(html: str, url: str = "") -> Article:
     return Article(url=url, title=title, text=text[:12000], site=_extract_site(soup))
 
 
-def fetch_article(url: str, max_chars: int = 4000, client: httpx.Client | None = None) -> Article:
+def fetch_article(
+    url: str,
+    max_chars: int = 4000,
+    client: httpx.Client | None = None,
+    allow_fake_ip: bool = False,
+) -> Article:
     """抓取并抽取正文；任何网络/解析失败都返回 ok=False 的 Article，不抛异常。
 
     安全：只允许访问公网 http(s) 地址，且对每一跳重定向重新校验（防 SSRF /
@@ -151,7 +172,7 @@ def fetch_article(url: str, max_chars: int = 4000, client: httpx.Client | None =
     http = client or httpx.Client(follow_redirects=False)
     try:
         for _hop in range(MAX_REDIRECTS + 1):
-            assert_public_url(current)
+            assert_public_url(current, allow_fake_ip=allow_fake_ip)
             response = http.get(current, headers=headers, timeout=DEFAULT_TIMEOUT, follow_redirects=False)
             if response.is_redirect:
                 location = response.headers.get("location")
