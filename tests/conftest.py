@@ -123,6 +123,18 @@ class ScriptedLLM:
             return LLMResponse(content=item, tool_calls=[], model=self.model)
         calls = []
         for index, raw in enumerate(item.get("tool_calls") or []):
+            if raw.get("raw_arguments") is not None:
+                # 模拟模型输出被 max_tokens 截断、JSON 不合法的情况
+                calls.append(
+                    ToolCall(
+                        id=raw.get("id") or f"call_{self.calls}_{index}",
+                        name=raw["name"],
+                        arguments={},
+                        raw_arguments=raw["raw_arguments"],
+                        parse_error="参数解析失败: Unterminated string（模拟截断）",
+                    )
+                )
+                continue
             calls.append(
                 ToolCall(
                     id=raw.get("id") or f"call_{self.calls}_{index}",

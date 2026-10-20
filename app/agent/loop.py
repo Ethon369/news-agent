@@ -17,7 +17,12 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.agent.llm import LLMClient, LLMError
-from app.agent.prompts import FORCE_FINAL_PROMPT, build_system_prompt, build_task_prompt
+from app.agent.prompts import (
+    FORCE_FINAL_PROMPT,
+    JSON_RETRY_PROMPT,
+    build_system_prompt,
+    build_task_prompt,
+)
 from app.agent.registry import ToolRegistry
 from app.tools.base import ToolContext
 
@@ -229,22 +234,40 @@ def run_agent(
         messages.append({"role": "user", "content": FORCE_FINAL_PROMPT})
         publish_schema = [spec.as_openai_schema() for spec in registry.specs if spec.name == "publish_briefing"]
         try:
-            response = llm.chat(messages, tools=publish_schema or None)
-            result.prompt_tokens += response.prompt_tokens
-            result.completion_tokens += response.completion_tokens
-            if response.content:
-                emit(
-                    LoopEvent(
-                        kind="assistant_message",
-                        thought=f"[强制收敛] {response.content}",
-                        prompt_tokens=result.prompt_tokens,
-                        completion_tokens=result.completion_tokens,
+            # 允许一次「JSON 被截断后重试」：强制收敛阶段只剩一次机会，模型可能因输出上限
+            # 把 publish_briefing 的参数 JSON 截断，这里追加更严格的约束再试一次。
+            for attempt in range(2):
+                response = llm.chat(messages, tools=publish_schema or None)
+                result.prompt_tokens += response.prompt_tokens
+                result.completion_tokens += response.completion_tokens
+                if response.content:
+                    emit(
+                        LoopEvent(
+                            kind="assistant_message",
+                            thought=f"[强制收敛] {response.content}",
+                            prompt_tokens=result.prompt_tokens,
+                            completion_tokens=result.completion_tokens,
+                        )
                     )
-                )
-            if response.has_tool_calls:
+                if not response.has_tool_calls:
+                    break
                 messages.append(_assistant_message(response.content, response.tool_calls))
+                parse_failed = any(call.parse_error for call in response.tool_calls)
                 for call in response.tool_calls:
                     execute_call(call)
+                if ctx.briefing_payload:
+                    break
+                if parse_failed and attempt == 0:
+                    messages.append({"role": "user", "content": JSON_RETRY_PROMPT})
+                    emit(
+                        LoopEvent(
+                            kind="assistant_message",
+                            thought="[强制收敛] 上一次工具参数 JSON 不完整，要求模型缩短内容后重试",
+                        )
+                    )
+                    continue
+                break
+
             result.briefing_payload = ctx.briefing_payload
             if ctx.briefing_payload:
                 result.status = "success"

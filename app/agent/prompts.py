@@ -33,6 +33,8 @@ list_dir / read_file / search_content / write_file / bash / search_news / fetch_
 
 ## 工作建议（不是强制流程）
 - 先快速确认历史（避免重复），再按话题分别检索，结果不足时换关键词补充；
+- **检索预算**：search_news 最多调用 5 次；一旦已有 5 条以上可用候选，就停止检索，转入正文核实与写作；
+- fetch_url 最多核实 2-3 条最重要的新闻，避免把时间花在抓取上；
 - 对最关键的 1-2 条抓正文核实后再写摘要；
 - 草稿可写入 drafts/ 便于复盘。
 """
@@ -40,7 +42,12 @@ list_dir / read_file / search_content / write_file / bash / search_news / fetch_
 FORCE_FINAL_PROMPT = (
     "工具调用步数或 token 预算已达到上限。你现在只能调用 publish_briefing 提交最终简报，"
     "不能再做新的检索。请基于已经获得的信息提交：如果信息确实不足，就提交你能确认的条目，"
-    "并在 summary 中说明信息有限。"
+    "并在 summary 中说明信息有限。items 最多 5 条，每条 summary 控制在 60 字以内，确保 JSON 完整。"
+)
+
+JSON_RETRY_PROMPT = (
+    "上一次工具调用的参数 JSON 被截断/不完整，没有成功提交。请重新调用 publish_briefing："
+    "items 最多 5 条、每条 summary 不超过 60 字、不要输出任何 JSON 之外的文字。"
 )
 
 

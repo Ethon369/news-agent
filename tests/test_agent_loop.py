@@ -148,6 +148,21 @@ def test_token_budget_forces_final(tool_ctx, scripted_llm):
     assert result.step_count <= 3
 
 
+def test_forced_final_retries_on_truncated_json(tool_ctx, scripted_llm):
+    """真实踩坑：max_tokens 截断导致 publish_briefing 参数 JSON 不完整，收敛阶段应再给一次机会。"""
+    truncated = '{"title": "AI Daily", "items": [{"title": "演示", "url": "https://example.com/demo/1"}]'
+    script = [
+        {"content": "看目录", "tool_calls": [{"name": "list_dir", "arguments": {"path": "archive"}}]},
+        {"content": "再看一次", "tool_calls": [{"name": "list_dir", "arguments": {"path": "archive"}}]},
+        {"content": "提交（被截断）", "tool_calls": [{"name": "publish_briefing", "raw_arguments": truncated}]},
+        {"content": "重试提交", "tool_calls": [{"name": "publish_briefing", "arguments": PUBLISH}]},
+    ]
+    result = run_agent(tool_ctx, scripted_llm(script), _registry(tool_ctx), max_steps=2)
+    assert result.status == "success"
+    assert result.briefing_payload is not None
+    assert result.briefing_payload["items"][0]["url"] == "https://example.com/demo/1"
+
+
 def test_finish_without_publish_is_failure(tool_ctx, scripted_llm):
     llm = scripted_llm(["我觉得今天没什么新闻。"])
     result = run_agent(tool_ctx, llm, _registry(tool_ctx), max_steps=4)
