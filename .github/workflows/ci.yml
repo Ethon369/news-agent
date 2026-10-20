@@ -22,11 +22,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Environment info
+        run: |
+          python -V
+          python -m pip -V
+          python -m pytest --version
+          python -m ruff --version
+          ls -la
+          ls -la tests
+
       - name: Lint
-        run: ruff check app tests
+        run: python -m ruff check app tests
 
       - name: Tests (全部离线：mock LLM + fixture 新闻源)
-        run: pytest -q
         env:
           LLM_MODE: mock
           SCHEDULER_ENABLED: "false"
+        run: |
+          set +e
+          python -m pytest -q --tb=short 2>&1 | tee /tmp/pytest.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "::error::pytest failed with exit code $code"
+            echo "----- pytest log tail -----"
+            tail -n 80 /tmp/pytest.log
+            exit "$code"
+          fi
