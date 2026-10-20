@@ -21,8 +21,11 @@ data/
 *.db
 *.sqlite3
 logs/
-workspace/archive/
-workspace/cache/
+workspace/
+pytest-of-*/
+
+# Pytest / tooling temp
+.pytest_tmp/
 
 # OS / editor
 .DS_Store
