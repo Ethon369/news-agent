@@ -239,6 +239,7 @@ erDiagram
         string source
         text summary
         text reason
+        string evidence_level "证据分级"
     }
     deliveries {
         int id PK
@@ -258,6 +259,7 @@ erDiagram
 | 抓取正文失败 | 返回标题+摘要+链接，提示模型"正文不可用，摘要需保守" |
 | 目标 URL 为内网/回环/元数据地址 | `assert_public_url` 拒绝（含每一跳重定向），返回结构化错误给模型 |
 | `publish_briefing` 参数非法 | 返回结构化错误给模型，让模型自行修正重试 |
+| 简报引用了未采集的链接 | 拒绝发布（`invalid_briefing`）并回喂模型：链接必须来自本次 search_news/fetch_url 结果 |
 | 推送渠道未配置 | `deliveries.status=skipped`，不影响简报落库 |
 | 推送网络失败 | 事务外逐渠道发送，失败记 `deliveries.status=failed`，不影响已落库简报 |
 | 步数/token 超限 | 注入收尾提示，只暴露 `publish_briefing` 让模型仍能提交；否则明确失败原因 |
@@ -273,6 +275,9 @@ erDiagram
 - [x] `fetch_url` SSRF 防护：仅公网 http(s)，DNS 解析结果校验，重定向逐跳校验；
 - [x] 推送在数据库事务外执行，逐渠道短事务记账，避免长时间持锁与状态不一致；
 - [x] LLM 输出视为不可信输入：工具参数一律 JSON Schema 校验；邮件 HTML 全字段转义、链接协议白名单；
+- [x] 链接溯源：简报只允许引用本次运行采集到的 URL（归一化后匹配），杜绝编造链接；
+- [x] 证据分级落库：已读正文 / 仅摘要 / 仅标题，避免读者误把标题当事实；
+- [x] Fake-IP 兼容开关默认关闭，开启后仅放行 198.18.0.0/15，其余私网仍拒绝；
 - [x] 前端渲染 Markdown 时先整体转义再解析（仅白名单标签），身份切换时丢弃过期响应；
 - [x] 框架级 404/405 也返回统一信封，避免契约不一致。
 

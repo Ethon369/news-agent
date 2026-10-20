@@ -93,6 +93,8 @@ LLM_MODEL=deepseek-chat
 | 每日自动运行 | 内置 APScheduler，每 5 分钟 tick，到点只为「今天还没跑过」的用户触发 |
 | 多通道推送 | 站内（默认）、飞书群机器人 Webhook、SMTP 邮件；失败降级不影响主流程 |
 | 去重闭环 | URL 归一化 + 标题近似 + 历史归档 `search_content` 三路去重；全部重复时输出「今日无新增」 |
+| **链接溯源** | 每条简报链接必须来自本次运行 `search_news` / `fetch_url` 的真实采集结果，模型无法编造或引用未采集链接 |
+| **证据分级** | 每条新闻标注「已读取原网页正文片段 / 仅来源摘要 / 仅标题」并落库展示，读者能判断摘要可信度 |
 | 可观测 | 运行表 / 轨迹表 / 推送表全链路落库，前端逐步回放 + Token 统计 |
 | 离线演示 | `LLM_MODE=mock`：确定性脚本模型 + 内置演示新闻源，零密钥、零外网也能跑通 |
 | 安全 | 文件工具目录 jail、bash 白名单 + 无 shell 组合子、`fetch_url` SSRF 防护（仅公网 + 重定向逐跳校验）、密钥只走环境变量 |
@@ -112,7 +114,7 @@ LLM_MODEL=deepseek-chat
 | `bash` | `bash(command, timeout)` | 沙箱内受限命令（`date`/`wc`/`head`/`grep`/`git status` 等） |
 | `search_news` | `search_news(query, days, limit)` | Bing News RSS + 固定 RSS 源检索（免 API Key） |
 | `fetch_url` | `fetch_url(url, max_chars)` | 抓取正文并抽取可读文本，用于核实与摘要 |
-| `publish_briefing` | `publish_briefing(title, summary, items[])` | 提交最终简报（结构校验通过才落库，成功后循环结束） |
+| `publish_briefing` | `publish_briefing(title, summary, items[])` | 提交最终简报；**链接必须来自本次运行已采集结果**（编造链接会被拒绝并回喂模型），成功后循环结束 |
 
 ### 3.2 运行轨迹长什么样
 
@@ -162,7 +164,7 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 
 `users` · `subscriptions` · `briefings` · `briefing_items` · `agent_runs` · `agent_steps` · `deliveries`
 
-建表 SQL 见 [migrations/001_init.sql](migrations/001_init.sql)（应用启动时幂等执行）。
+建表 SQL 见 [migrations/](migrations/)（`001_init.sql` 初始表结构 + `002_add_evidence_level.sql` 证据分级；应用启动时幂等执行）。
 
 ---
 
@@ -177,6 +179,8 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 | RSS + Bing News RSS 免密钥 | 不依赖第三方搜索 API；模型自己决定 query 与轮次 | [ADR-0005](docs/ADR/0005-news-source-strategy.md) |
 | 推送可插拔 + 失败降级 | 推送不应浪费一次已成功的运行；未配置渠道记 `skipped` | [ADR-0006](docs/ADR/0006-pluggable-push-channels.md) |
 | **AI 代码审查后加固** | 首版由 AI 写完后用独立子 Agent 审查，修复 2 个 P1（git 参数绕过、SSRF）+ 多个 P2（推送阻塞事务、强制收敛失效、时区、并发、信封一致性等） | [ADR-0007](docs/ADR/0007-security-hardening.md) |
+| 链接溯源 + 证据分级 | 吸收对比实现的 source_ids 设计：链接只能来自采集结果；每条标注证据范围 | [ADR-0008](docs/ADR/0008-url-provenance-and-evidence.md) |
+| Fake-IP 代理兼容 | 默认严格；Clash/Surge 环境可显式放行 198.18.0.0/15 以便抓正文 | [ADR-0009](docs/ADR/0009-fake-ip-proxy-mode.md) |
 
 ---
 
@@ -193,6 +197,7 @@ Service（app/services）── runner 编排 / briefing 业务规则 / schedule
 | `AGENT_TOKEN_BUDGET` | `500000` | 单次运行累计 prompt token 上限，超预算强制收尾 |
 | `DATABASE_URL` | `sqlite:///./data/ai_daily.db` | 可切 MySQL/Postgres |
 | `NEWS_RSS_FEEDS` | HN/arXiv/TechCrunch/机器之心 | 逗号分隔，随意增删 |
+| `NEWS_ALLOW_FAKE_IP` | `false` | Clash/Surge 等 Fake-IP 代理（198.18.0.0/15）下抓正文需设为 `true` |
 | `PUSH_CHANNELS` | `web` | 服务端允许的推送渠道（web 始终可用） |
 | `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET` | 空 | 飞书群机器人 |
 | `SMTP_*` | 空 | 邮件推送（需用户填邮箱） |
@@ -226,7 +231,7 @@ SMTP_USE_SSL=true
 
 ```bash
 pip install -r requirements-dev.txt
-pytest            # 115 个用例，全部离线（不依赖网络与真实 LLM）
+pytest            # 132 个用例，全部离线（不依赖网络与真实 LLM）
 ruff check app    # 代码规范
 ```
 
@@ -259,7 +264,7 @@ ai-daily-agent/
 │   ├── static/            # 单页前端（原生 JS）
 │   └── cli.py             # serve / initdb / run / demo
 ├── docs/                  # PRD / 架构 / ADR / API 契约 / 演示脚本 / 说明
-├── migrations/001_init.sql
+├── migrations/            # 001_init.sql + 002_add_evidence_level.sql
 ├── tests/
 ├── scripts/               # 冒烟测试与演示录屏脚本
 └── requirements*.txt
@@ -283,7 +288,9 @@ ai-daily-agent/
 - bash 采用白名单子命令而非真实 shell（演示环境的安全取舍，见 ADR-0002）；
 - 推送未引入 outbox/重试队列，单次失败仅记录；
 - 未接入商业搜索 API（Tavily 等），RSS 覆盖面有限；
-- 定时调度为单进程 APScheduler，多实例部署需换分布式调度。
+- 定时调度为单进程 APScheduler，多实例部署需换分布式调度；
+- 链接溯源只保证「链接来自本次采集」，不保证摘要与链接语义对应（仍需双源核实/人工复核）；
+- Fake-IP 兼容模式（默认关闭）会弱化「真实目标 IP」校验，生产环境应改用公共 DNS 重解析或出口白名单。
 
 ---
 
