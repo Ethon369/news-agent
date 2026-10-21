@@ -29,7 +29,7 @@
 | 15 | `test(e2e): 离线端到端验收` | `tests/test_e2e_offline.py`、API 测试 | 验收 |
 | 16 | `docs: README 与 5 分钟跑通指南` | `README.md` | 交付 |
 | 17 | `chore(ci): GitHub Actions 校验` | `.github/workflows/ci.yml` | 交付 |
-| 18 | `docs: 演示脚本与交付说明` | `docs/DEMO.md`、`docs/INTERVIEW_NOTES.md`、录屏 | 交付 |
+| 18 | `docs: 演示脚本与交付说明` | `docs/DEMO.md`、录屏 | 交付 |
 
 ## 提交信息示例
 

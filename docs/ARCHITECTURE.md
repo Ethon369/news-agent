@@ -137,7 +137,7 @@ flowchart LR
 - 命令白名单：`date` / `wc` / `head` / `tail` / `cat`（只读且限 workspace 内路径）/ `python -c` 仅限纯计算场景；
 - 拒绝管道、重定向、`;`、`&&`、`$(...)`、反引号等 shell 组合子；
 - 在 workspace 目录下执行，超时（默认 15s）强杀，stdout/stderr 截断；
-- **的取舍**：真实生产会用容器/firejail/seccomp；这里用「参数化白名单 + 无 shell 组合子」在单机演示环境下以最小成本挡住 99% 的注入面。
+- **这里的关键取舍**：真实生产会用容器/firejail/seccomp；这里用「参数化白名单 + 无 shell 组合子」在单机演示环境下以最小成本挡住 99% 的注入面。
 
 ## 4. 一次运行的时序（每日定时 / 手动触发）
 
@@ -302,7 +302,7 @@ ai-daily-agent/
 │   ├── notify/            # web / feishu / email 通道
 │   ├── static/            # 单页前端
 │   └── cli.py             # 命令行入口（run/serve/mock）
-├── docs/                  # PRD、架构、ADR、演示脚本、说明
+├── docs/                  # PRD、架构、ADR、演示脚本
 ├── migrations/            # 001_init.sql
 ├── tests/                 # 单测/集成/E2E（离线）
 ├── scripts/               # 演示录屏等脚本
