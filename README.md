@@ -279,7 +279,7 @@ ai-daily-agent/
 
 ## 9. 演示与讲解
 
-- **3 分钟演示录屏**：[docs/demo/ai-daily-demo.webm](docs/demo/ai-daily-demo.webm)（1 分 31 秒，真实 DeepSeek 模型 + 真实新闻源；含证据分级与站内+邮件推送；用 Chrome/Edge 直接打开即可播放）
+- **3 分钟演示录屏**：[docs/demo/ai-daily-demo.webm](docs/demo/ai-daily-demo.webm)（1 分 46 秒，真实 DeepSeek 运行 + 站内/邮件推送 + 结尾附 QQ 邮箱实收画面；用 Chrome/Edge 直接打开即可播放）
 - 录屏封面：[docs/demo/demo-cover.png](docs/demo/demo-cover.png)（运行轨迹页，可见模型正在实时决策）
 - 录屏脚本（可复现）：[scripts/record_demo.mjs](scripts/record_demo.mjs)，说明见 [docs/DEMO.md](docs/DEMO.md)
 - 交付说明（怎么想 / 为什么 / 卡在哪）：[docs/INTERVIEW_NOTES.md](docs/INTERVIEW_NOTES.md)

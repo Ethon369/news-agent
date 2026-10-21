@@ -25,7 +25,7 @@ python -m app serve --port 8000
 node scripts/record_demo.mjs
 ```
 
-产物：`docs/demo/raw/*.webm`（Playwright 原始录制），本仓库最终视频为 `docs/demo/ai-daily-demo.webm`（1 分 31 秒）。
+产物：`docs/demo/raw/*.webm`（Playwright 原始录制），本仓库最终视频为 `docs/demo/ai-daily-demo.webm`（1 分 46 秒）。
 
 > 注：Playwright 自带的 ffmpeg 是精简版（只含 VP8/WebM 编码），无法直接转 mp4。
 > 如需 mp4，可用系统安装的完整 ffmpeg：
