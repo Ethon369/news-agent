@@ -135,7 +135,7 @@ async function main() {
     await browser.close();
     return;
   }
-  await sleep(2200);
+  await sleep(1200);
 
   console.log("[demo] 展示顶部身份与模型徽标…");
   await moveTo(page.locator("#llm-badge"), 1600);
@@ -178,7 +178,7 @@ async function main() {
   console.log("[demo] 触发一次真实运行…");
   await clickEl(page.locator("#run-btn"), 1600);
   const startedAt = Date.now();
-  const deadline = startedAt + 240000;
+  const deadline = startedAt + 140000;
   let finished = false;
   let lastScrollAt = 0;
   while (Date.now() < deadline) {
@@ -198,7 +198,7 @@ async function main() {
     await sleep(600);
   }
   console.log(`[demo] 运行结束：${finished ? "完成" : "超时"}，用时 ${((Date.now() - startedAt) / 1000).toFixed(0)}s`);
-  await sleep(2600);
+  await sleep(1800);
 
   // 运行成功后 UI 会自动切到新简报；这里再明确展示一次轨迹与简报
   await clickEl(page.locator("#tab-run"), 900);
@@ -209,13 +209,13 @@ async function main() {
 
   console.log("[demo] 展示生成结果…");
   await clickEl(page.locator("#tab-briefings"), 900);
-  await clickEl(page.locator(".briefing-item"), 2400);
+  await clickEl(page.locator(".briefing-item"), 1600);
   await page.mouse.move(1060, 640, { steps: 18 });
   await sleep(700);
   await page.mouse.wheel(0, 520);
-  await sleep(2000);
+  await sleep(1200);
   await page.mouse.wheel(0, -260);
-  await sleep(1600);
+  await sleep(1000);
 
   const video = page.video();
   await page.close();
