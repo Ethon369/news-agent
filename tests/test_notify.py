@@ -105,6 +105,7 @@ def test_email_html_escapes_llm_content():
     assert 'href="#"' in html  # 非 http(s) 链接被降级
     assert "&lt;i&gt;用户" in html
     assert "证据范围：仅标题" in html  # 证据分级进入邮件正文
+    assert '<meta charset="utf-8">' in html  # 否则浏览器/客户端可能按错误编码渲染成乱码
 
 
 def test_email_subject_uses_date_and_top_story():

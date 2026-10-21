@@ -65,7 +65,7 @@ def render_email_html(briefing, user) -> str:
     date_label = _date_label(getattr(briefing, "briefing_date", None))
     user_name = html.escape(str(getattr(user, "name", "") or ""))
     parts = [
-        '<html><body style="margin:0;padding:0;background:#f6f7f9;">',
+        '<html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f6f7f9;">',
         '<div style="font-family:-apple-system,Segoe UI,Microsoft YaHei,sans-serif;'
         'max-width:640px;margin:0 auto;padding:28px 24px;color:#1f2937;line-height:1.7;background:#ffffff;">',
         f'<div style="font-size:12px;letter-spacing:2px;color:#6b7280;text-transform:uppercase;">{BRAND}</div>',
