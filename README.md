@@ -1,6 +1,6 @@
 # AI Daily · 每日 AI 新闻助手 Agent
 
-> 选项 A（Agent Loop）交付仓库
+> 每日 AI 新闻助手 Agent · 选项 A（Agent Loop）交付仓库
 >
 [![CI](https://github.com/Ethon369/news-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Ethon369/news-agent/actions/workflows/ci.yml)
 
